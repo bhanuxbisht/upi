@@ -1,0 +1,55 @@
+# PayWise Project Rules
+
+## What We're Building
+PayWise — India's payment intelligence platform. A web app + Chrome extension that aggregates UPI/card/wallet cashback offers and recommends the best payment method per transaction.
+
+## Project Context
+- **Founder:** Business founder (non-technical)
+- **Budget:** ₹2L bootstrap
+- **Phase:** MVP (Feb-Apr 2026)
+- **Platform:** Next.js 14 web app + Chrome extension
+- **Reference Doc:** STARTUP_PLAN.md (full playbook)
+
+## Tech Stack (LOCKED — do not change without discussion)
+- **Frontend:** Next.js 14 (App Router) + TypeScript 5.x
+- **UI:** Tailwind CSS 3.4 + shadcn/ui
+- **Backend:** Next.js API Routes (no separate Express server for MVP)
+- **Database:** Supabase (PostgreSQL 16) — auth, DB, storage
+- **Cache:** Upstash Redis (serverless)
+- **Hosting:** Vercel
+- **Analytics:** Mixpanel
+- **Email:** Resend
+- **Extension:** Chrome Manifest V3 + Plasmo framework
+
+## Code Rules
+1. **TypeScript strict mode** — no `any` types, no `@ts-ignore`
+2. **No `var`** — use `const` by default, `let` only when reassignment needed
+3. **Server Components by default** — use `"use client"` only when needed (event handlers, hooks, browser APIs)
+4. **All API routes validate input** — use Zod schemas
+5. **No inline styles** — Tailwind only
+6. **File naming:** kebab-case for files, PascalCase for components
+7. **Imports:** absolute paths via `@/` alias
+8. **Error handling:** every async call has try/catch, user-facing errors are friendly
+9. **No console.log in production** — use proper logging
+10. **Environment variables:** all in `.env.local`, typed in `env.ts`
+
+## Architecture Rules
+1. **Folder structure follows Next.js App Router conventions**
+2. **Database queries go through service layer** — never call Supabase directly from components
+3. **Shared types in `@/types/`** — single source of truth
+4. **API responses follow consistent format:** `{ success: boolean, data?: T, error?: string }`
+5. **All forms use react-hook-form + zod** — no uncontrolled inputs
+6. **Reusable UI in `@/components/ui/`** (shadcn), custom in `@/components/`
+7. **No business logic in components** — extract to hooks or services
+
+## Git Rules
+1. **Commit often**, small focused commits
+2. **Conventional commits:** `feat:`, `fix:`, `chore:`, `docs:`
+3. **Never commit `.env.local`**
+4. **Main branch is always deployable**
+
+## When Starting a New Session
+1. Read `STARTUP_PLAN.md` for full context
+2. Check this rules file for constraints
+3. Check current state of code before making changes
+4. Ask if anything is unclear — don't guess
