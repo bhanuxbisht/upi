@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Menu, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { APP_NAME, NAV_LINKS } from "@/lib/constants";
 
 export function Navbar() {
@@ -59,6 +59,7 @@ export function Navbar() {
                 <Sparkles className="h-5 w-5 text-emerald-500" />
                 {APP_NAME}
               </SheetTitle>
+              <SheetDescription className="sr-only">Mobile navigation menu</SheetDescription>
               <nav className="flex flex-col gap-4 text-center">
                 {NAV_LINKS.map((link) => (
                   <Link

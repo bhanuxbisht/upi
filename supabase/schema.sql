@@ -151,18 +151,28 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Row-Level Security
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE merchants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_apps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE offer_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE offer_verifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_payment_methods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE waitlist ENABLE ROW LEVEL SECURITY;
 
+-- Public read for reference tables (categories, merchants, payment_apps)
+CREATE POLICY "Categories are viewable by everyone"
+  ON categories FOR SELECT USING (true);
+
+CREATE POLICY "Merchants are viewable by everyone"
+  ON merchants FOR SELECT USING (true);
+
+CREATE POLICY "Payment apps are viewable by everyone"
+  ON payment_apps FOR SELECT USING (true);
+
 -- Public read for offers (anyone can browse)
 CREATE POLICY "Offers are viewable by everyone"
   ON offers FOR SELECT USING (true);
-
--- Public read for categories, merchants, payment_apps
--- (These tables don't need RLS — they're reference data)
 
 -- Authenticated users can submit offers
 CREATE POLICY "Authenticated users can submit offers"
@@ -173,7 +183,7 @@ CREATE POLICY "Users can view their own submissions"
   ON offer_submissions FOR SELECT
   USING (auth.uid() = user_id);
 
--- Authenticated users can verify offers
+-- Authenticated users can verify offers (one vote per offer)
 CREATE POLICY "Authenticated users can verify offers"
   ON offer_verifications FOR INSERT
   WITH CHECK (auth.uid() = user_id);
@@ -181,18 +191,19 @@ CREATE POLICY "Authenticated users can verify offers"
 CREATE POLICY "Verifications are viewable by everyone"
   ON offer_verifications FOR SELECT USING (true);
 
--- Users manage their own payment methods
+-- Users manage their own payment methods only
 CREATE POLICY "Users manage own payment methods"
   ON user_payment_methods FOR ALL
   USING (auth.uid() = user_id);
 
--- Anyone can join waitlist
+-- Anyone can join waitlist (insert only, no read)
 CREATE POLICY "Anyone can join waitlist"
   ON waitlist FOR INSERT
   WITH CHECK (true);
 
 -- ============================================
--- SEED DATA: Categories, Payment Apps, Sample Merchants & Offers
+-- REFERENCE DATA: Categories & Payment Apps
+-- These are REAL — not demo/fake data
 -- ============================================
 
 INSERT INTO categories (name, slug, icon) VALUES
@@ -218,65 +229,28 @@ INSERT INTO payment_apps (name, slug, type, color) VALUES
   ('Freecharge', 'freecharge', 'wallet', '#7B2D8E'),
   ('Mobikwik', 'mobikwik', 'wallet', '#2196F3');
 
--- Sample merchants
+-- Real merchants in India (no fake offers attached)
 INSERT INTO merchants (name, slug, category_id) VALUES
   ('Swiggy', 'swiggy', (SELECT id FROM categories WHERE slug = 'food-delivery')),
   ('Zomato', 'zomato', (SELECT id FROM categories WHERE slug = 'food-delivery')),
   ('Amazon', 'amazon', (SELECT id FROM categories WHERE slug = 'shopping')),
   ('Flipkart', 'flipkart', (SELECT id FROM categories WHERE slug = 'shopping')),
-  ('BigBasket', 'bigbasket', (SELECT id FROM categories WHERE slug = 'groceries')),
-  ('Blinkit', 'blinkit', (SELECT id FROM categories WHERE slug = 'groceries')),
-  ('Starbucks', 'starbucks', (SELECT id FROM categories WHERE slug = 'food-delivery')),
-  ('Jio', 'jio', (SELECT id FROM categories WHERE slug = 'bills-recharges')),
-  ('Airtel', 'airtel', (SELECT id FROM categories WHERE slug = 'bills-recharges')),
-  ('MakeMyTrip', 'makemytrip', (SELECT id FROM categories WHERE slug = 'travel')),
-  ('IRCTC', 'irctc', (SELECT id FROM categories WHERE slug = 'travel')),
-  ('BookMyShow', 'bookmyshow', (SELECT id FROM categories WHERE slug = 'entertainment')),
   ('Myntra', 'myntra', (SELECT id FROM categories WHERE slug = 'shopping')),
   ('Nykaa', 'nykaa', (SELECT id FROM categories WHERE slug = 'shopping')),
-  ('PharmEasy', 'pharmeasy', (SELECT id FROM categories WHERE slug = 'health-pharmacy'));
-
--- Sample offers (demo data)
-INSERT INTO offers (merchant_id, payment_app_id, type, title, description, cashback_amount, max_cashback, min_transaction, valid_to, verified_count) VALUES
-  (
-    (SELECT id FROM merchants WHERE slug = 'swiggy'),
-    (SELECT id FROM payment_apps WHERE slug = 'phonepe'),
-    'cashback', 'Flat ₹75 cashback on Swiggy orders',
-    'Get flat ₹75 cashback on Swiggy orders above ₹199 paid via PhonePe UPI. Valid once per user.',
-    75, 75, 199, NOW() + INTERVAL '30 days', 45
-  ),
-  (
-    (SELECT id FROM merchants WHERE slug = 'zomato'),
-    (SELECT id FROM payment_apps WHERE slug = 'google-pay'),
-    'cashback', '10% cashback on Zomato with HDFC Card',
-    'Get 10% cashback (max ₹200) on Zomato paid via HDFC credit card on Google Pay.',
-    NULL, 200, 300, NOW() + INTERVAL '45 days', 32
-  ),
-  (
-    (SELECT id FROM merchants WHERE slug = 'jio'),
-    (SELECT id FROM payment_apps WHERE slug = 'phonepe'),
-    'cashback', '₹30 cashback on Jio recharge',
-    'Recharge Jio prepaid ₹399+ on PhonePe and get ₹30 cashback.',
-    30, 30, 399, NOW() + INTERVAL '30 days', 51
-  ),
-  (
-    (SELECT id FROM merchants WHERE slug = 'amazon'),
-    (SELECT id FROM payment_apps WHERE slug = 'amazon-pay'),
-    'cashback', '5% back on Amazon via Amazon Pay ICICI',
-    'Get 5% cashback (max ₹300) on Amazon purchases paid via Amazon Pay ICICI credit card.',
-    NULL, 300, 500, NOW() + INTERVAL '60 days', 67
-  ),
-  (
-    (SELECT id FROM merchants WHERE slug = 'starbucks'),
-    (SELECT id FROM payment_apps WHERE slug = 'cred'),
-    'bogo', 'CRED Pay: Buy 1 Get 1 at Starbucks',
-    'Pay at Starbucks via CRED Pay and get Buy 1 Get 1 on any beverage.',
-    NULL, 500, NULL, NOW() + INTERVAL '14 days', 19
-  ),
-  (
-    (SELECT id FROM merchants WHERE slug = 'bigbasket'),
-    (SELECT id FROM payment_apps WHERE slug = 'paytm'),
-    'cashback', '₹100 cashback on BigBasket groceries',
-    'Get flat ₹100 cashback on BigBasket orders above ₹999 paid via Paytm.',
-    100, 100, 999, NOW() + INTERVAL '20 days', 38
-  );
+  ('BigBasket', 'bigbasket', (SELECT id FROM categories WHERE slug = 'groceries')),
+  ('Blinkit', 'blinkit', (SELECT id FROM categories WHERE slug = 'groceries')),
+  ('Zepto', 'zepto', (SELECT id FROM categories WHERE slug = 'groceries')),
+  ('Jio', 'jio', (SELECT id FROM categories WHERE slug = 'bills-recharges')),
+  ('Airtel', 'airtel', (SELECT id FROM categories WHERE slug = 'bills-recharges')),
+  ('Vi', 'vi', (SELECT id FROM categories WHERE slug = 'bills-recharges')),
+  ('MakeMyTrip', 'makemytrip', (SELECT id FROM categories WHERE slug = 'travel')),
+  ('IRCTC', 'irctc', (SELECT id FROM categories WHERE slug = 'travel')),
+  ('Ola', 'ola', (SELECT id FROM categories WHERE slug = 'travel')),
+  ('Uber', 'uber', (SELECT id FROM categories WHERE slug = 'travel')),
+  ('Rapido', 'rapido', (SELECT id FROM categories WHERE slug = 'travel')),
+  ('BookMyShow', 'bookmyshow', (SELECT id FROM categories WHERE slug = 'entertainment')),
+  ('Starbucks', 'starbucks', (SELECT id FROM categories WHERE slug = 'food-delivery')),
+  ('PharmEasy', 'pharmeasy', (SELECT id FROM categories WHERE slug = 'health-pharmacy')),
+  ('1mg', '1mg', (SELECT id FROM categories WHERE slug = 'health-pharmacy')),
+  ('Indian Oil', 'indian-oil', (SELECT id FROM categories WHERE slug = 'fuel')),
+  ('HP Petrol', 'hp-petrol', (SELECT id FROM categories WHERE slug = 'fuel'));

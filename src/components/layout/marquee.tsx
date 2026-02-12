@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { PAYMENT_APPS } from "@/lib/constants";
 
 export function PaymentLogoMarquee() {
@@ -26,30 +27,35 @@ export function PaymentLogoMarquee() {
           style={{ width: "max-content" }}
         >
           {logos.map((app, index) => (
-            <div
-              key={`${app.slug}-${index}`}
-              className="group relative flex h-14 w-40 items-center justify-center gap-3 rounded-xl border border-border/40 bg-white/40 px-4 backdrop-blur-sm transition-all hover:bg-white hover:shadow-lg dark:bg-white/5 dark:hover:bg-white/10"
+            <Link 
+              key={`${app.slug}-${index}`} 
+              href={`/offers?payment_app=${app.slug}`}
+              className="block"
             >
-              <div 
-                className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-[10px] font-bold text-gray-500 grayscale transition-all group-hover:bg-transparent group-hover:text-white group-hover:grayscale-0 dark:bg-zinc-800"
-                style={{ '--hover-bg': app.color } as React.CSSProperties}
+              <div
+                className="group relative flex h-14 w-40 cursor-pointer items-center justify-center gap-3 rounded-xl border border-border/40 bg-white/40 px-4 backdrop-blur-sm transition-all hover:bg-white hover:shadow-lg dark:bg-white/5 dark:hover:bg-white/10"
               >
                 <div 
-                  className="absolute inset-0 rounded-xl opacity-0 transition-opacity group-hover:opacity-10"
-                  style={{ backgroundColor: app.color }}
-                />
-                <span className="z-10 text-xs text-foreground group-hover:text-inherit">
-                   {app.name.charAt(0)}
-                </span>
+                  className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-[10px] font-bold text-gray-500 grayscale transition-all group-hover:bg-transparent group-hover:text-white group-hover:grayscale-0 dark:bg-zinc-800"
+                  style={{ '--hover-bg': app.color } as React.CSSProperties}
+                >
+                  <div 
+                    className="absolute inset-0 rounded-xl opacity-0 transition-opacity group-hover:opacity-10"
+                    style={{ backgroundColor: app.color }}
+                  />
+                  <span className="z-10 text-xs text-foreground group-hover:text-inherit">
+                    {app.name.charAt(0)}
+                  </span>
+                  
+                  {/* Colored dot for active state vibe */}
+                  <div className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full opacity-20 transition-opacity group-hover:opacity-100" style={{ backgroundColor: app.color }} />
+                </div>
                 
-                {/* Colored dot for active state vibe */}
-                <div className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full opacity-20 transition-opacity group-hover:opacity-100" style={{ backgroundColor: app.color }} />
+                <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+                  {app.name}
+                </span>
               </div>
-              
-              <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-                {app.name}
-              </span>
-            </div>
+            </Link>
           ))}
         </motion.div>
       </div>

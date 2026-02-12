@@ -74,7 +74,7 @@ export default function HomePage() {
         <div className="absolute inset-0 -z-10 h-full w-full bg-white bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] bg-[size:6rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] dark:bg-black dark:bg-[linear-gradient(to_right,#1f1f1f_1px,transparent_1px),linear-gradient(to_bottom,#1f1f1f_1px,transparent_1px)]" />
 
         <div className="mx-auto max-w-7xl px-6 text-center lg:px-8">
-          <div className="mx-auto mb-8 flex max-w-fit items-center justify-center space-x-2 overflow-hidden rounded-full border border-emerald-100 bg-white/50 px-7 py-2 shadow-md backdrop-blur-3xl transition-all hover:border-emerald-200 hover:bg-white/80 dark:border-emerald-900/50 dark:bg-black/50">
+          <div className="mx-auto mb-8 flex max-w-fit cursor-pointer items-center justify-center space-x-2 overflow-hidden rounded-full border border-emerald-100 bg-white/50 px-7 py-2 shadow-md backdrop-blur-3xl transition-all hover:border-emerald-200 hover:bg-white/80 dark:border-emerald-900/50 dark:bg-black/50">
             <Badge variant="secondary" className="rounded-full bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900 dark:text-emerald-300">New</Badge>
             <p className="text-sm font-medium text-muted-foreground">
               Built for India&apos;s 500M+ UPI users
@@ -98,14 +98,14 @@ export default function HomePage() {
             <Link href="/recommend">
               <Button
                 size="lg"
-                className="rounded-full bg-emerald-600 px-8 hover:bg-emerald-700 shadow-xl shadow-emerald-500/20"
+                className="cursor-pointer rounded-full bg-emerald-600 px-8 hover:bg-emerald-700 shadow-xl shadow-emerald-500/20"
               >
                 Find Best Payment
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
             <Link href="/offers">
-              <Button size="lg" variant="outline" className="rounded-full px-8 backdrop-blur-sm bg-background/50 border-emerald-100 hover:bg-emerald-50/50">
+              <Button size="lg" variant="outline" className="cursor-pointer rounded-full px-8 backdrop-blur-sm bg-background/50 border-emerald-100 hover:bg-emerald-50/50">
                 Browse Offers
               </Button>
             </Link>
@@ -230,7 +230,6 @@ export default function HomePage() {
 
       {/* CTA */}
       <section className="relative overflow-hidden bg-gradient-to-br from-emerald-600 to-teal-700 px-4 py-24 text-white sm:px-6 lg:px-8">
-         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-soft-light"></div>
         <div className="relative mx-auto max-w-3xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Start saving on every payment today
