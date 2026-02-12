@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Mail, Loader2 } from "lucide-react";
+import { Loader2, LogIn, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,13 +16,16 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
 });
 
 type LoginInput = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const supabase = getSupabaseBrowserClient();
+  const router = useRouter();
 
   const {
     register,
@@ -31,22 +35,20 @@ export function LoginForm() {
     resolver: zodResolver(loginSchema),
   });
 
-  async function onMagicLink(data: LoginInput) {
-    const { error } = await supabase.auth.signInWithOtp({
+  async function onLogin(data: LoginInput) {
+    const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      password: data.password,
     });
 
     if (error) {
-      toast.error("Failed to send magic link", { description: error.message });
+      toast.error("Login failed", { description: error.message });
       return;
     }
 
-    toast.success("Check your email!", {
-      description: "We sent you a magic link to log in.",
-    });
+    toast.success("Welcome back!");
+    router.push("/");
+    router.refresh();
   }
 
   async function onGoogleLogin() {
@@ -106,8 +108,8 @@ export function LoginForm() {
           </span>
         </div>
 
-        {/* Magic Link */}
-        <form onSubmit={handleSubmit(onMagicLink)} className="space-y-3">
+        {/* Email + Password Login */}
+        <form onSubmit={handleSubmit(onLogin)} className="space-y-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium">Email</label>
             <Input
@@ -119,6 +121,26 @@ export function LoginForm() {
               <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
             )}
           </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Password</label>
+            <div className="relative">
+              <Input
+                {...register("password")}
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
+            )}
+          </div>
           <Button
             type="submit"
             disabled={isSubmitting}
@@ -127,9 +149,9 @@ export function LoginForm() {
             {isSubmitting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Mail className="mr-2 h-4 w-4" />
+              <LogIn className="mr-2 h-4 w-4" />
             )}
-            Send Magic Link
+            Log In
           </Button>
         </form>
 

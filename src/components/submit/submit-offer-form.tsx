@@ -30,13 +30,28 @@ export function SubmitOfferForm() {
   });
 
   async function onSubmit(data: OfferSubmissionInput) {
-    // TODO: Send to Supabase once connected
-    // For now, show success toast
-    toast.success("Offer submitted!", {
-      description:
-        "Thanks for contributing! Our team will review and publish it shortly.",
-    });
-    reset();
+    try {
+      const res = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        toast.error(result.error || "Failed to submit offer");
+        return;
+      }
+
+      toast.success("Offer submitted!", {
+        description:
+          "Thanks for contributing! Our team will review and publish it shortly.",
+      });
+      reset();
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    }
   }
 
   return (

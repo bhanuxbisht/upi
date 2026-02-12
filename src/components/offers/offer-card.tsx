@@ -1,24 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Copy } from "lucide-react";
+import type { OfferWithRelations } from "@/types";
 
 interface OfferCardProps {
-  offer: {
-    id: string;
-    title: string;
-    description: string;
-    merchant: { name: string; slug: string };
-    payment_app: { name: string; color: string };
-    type: string;
-    cashback_amount: number | null;
-    cashback_percent: number | null;
-    max_cashback: number | null;
-    min_transaction: number | null;
-    promo_code: string | null;
-    valid_to: string;
-    verified_count: number;
-    category: string;
-  };
+  offer: OfferWithRelations;
 }
 
 export function OfferCard({ offer }: OfferCardProps) {
@@ -46,7 +32,7 @@ export function OfferCard({ offer }: OfferCardProps) {
                 {offer.payment_app.name}
               </Badge>
               <Badge variant="secondary" className="bg-muted/50 text-xs font-medium text-muted-foreground">
-                {offer.category}
+                {offer.type}
               </Badge>
               {offer.verified_count >= 10 && (
                 <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-400">

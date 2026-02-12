@@ -1,14 +1,53 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Menu, X, Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Menu, X, Sparkles, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { APP_NAME, NAV_LINKS } from "@/lib/constants";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { User as SupabaseUser, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 export function Navbar() {
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const supabase = getSupabaseBrowserClient();
+
+  useEffect(() => {
+    // Get the initial session
+    supabase.auth.getUser().then(({ data }: { data: { user: SupabaseUser | null } }) => {
+      setUser(data.user);
+      setLoading(false);
+    });
+
+    // Listen for auth state changes (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+    router.refresh();
+  }
+
+  const initials = user?.user_metadata?.full_name
+    ? user.user_metadata.full_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.charAt(0).toUpperCase() ?? "U";
 
   return (
     <div className="fixed top-6 z-50 w-full flex justify-center px-4 pointer-events-none">
@@ -35,16 +74,47 @@ export function Navbar() {
             ))}
           </nav>
 
-          {/* Desktop CTA */}
+          {/* Desktop CTA — Auth Aware */}
           <div className="hidden items-center gap-4 md:flex">
-            <Link href="/login" className="text-sm font-medium text-zinc-600 hover:text-emerald-600 dark:text-zinc-400">
-              Log in
-            </Link>
-            <Link href="/signup">
-              <Button size="sm" className="rounded-full bg-zinc-900 px-5 text-white shadow-lg shadow-zinc-900/20 hover:bg-zinc-800 hover:shadow-zinc-900/30 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
-                Sign up
-              </Button>
-            </Link>
+            {loading ? (
+              <div className="h-8 w-20 animate-pulse rounded-full bg-muted" />
+            ) : user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="cursor-pointer gap-2 rounded-full px-2">
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback className="bg-emerald-100 text-xs font-semibold text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      {user.user_metadata?.full_name || user.email?.split("@")[0]}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem className="text-xs text-muted-foreground" disabled>
+                    <User className="mr-2 h-3.5 w-3.5" />
+                    {user.email}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600">
+                    <LogOut className="mr-2 h-3.5 w-3.5" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Link href="/login" className="text-sm font-medium text-zinc-600 hover:text-emerald-600 dark:text-zinc-400">
+                  Log in
+                </Link>
+                <Link href="/signup">
+                  <Button size="sm" className="cursor-pointer rounded-full bg-zinc-900 px-5 text-white shadow-lg shadow-zinc-900/20 hover:bg-zinc-800 hover:shadow-zinc-900/30 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
+                    Sign up
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu */}
@@ -72,16 +142,32 @@ export function Navbar() {
                   </Link>
                 ))}
                 <div className="mt-4 flex flex-col gap-3 px-8">
-                  <Link href="/login" onClick={() => setOpen(false)}>
-                    <Button variant="outline" className="w-full rounded-full border-emerald-200">
-                      Log in
-                    </Button>
-                  </Link>
-                  <Link href="/signup" onClick={() => setOpen(false)}>
-                    <Button className="w-full rounded-full bg-emerald-600 hover:bg-emerald-700">
-                      Sign up free
-                    </Button>
-                  </Link>
+                  {user ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                      <Button
+                        variant="outline"
+                        className="w-full cursor-pointer rounded-full border-red-200 text-red-600"
+                        onClick={() => { handleLogout(); setOpen(false); }}
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Log out
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/login" onClick={() => setOpen(false)}>
+                        <Button variant="outline" className="w-full cursor-pointer rounded-full border-emerald-200">
+                          Log in
+                        </Button>
+                      </Link>
+                      <Link href="/signup" onClick={() => setOpen(false)}>
+                        <Button className="w-full cursor-pointer rounded-full bg-emerald-600 hover:bg-emerald-700">
+                          Sign up free
+                        </Button>
+                      </Link>
+                    </>
+                  )}
                 </div>
               </nav>
             </SheetContent>

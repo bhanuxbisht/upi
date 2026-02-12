@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("offer_submissions")
       .insert({
-        submitted_by: user.id,
+        user_id: user.id,
         merchant_name: submission.merchant_name,
         payment_app_name: submission.payment_app_name,
         offer_title: submission.offer_title,

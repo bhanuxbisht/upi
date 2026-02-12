@@ -26,7 +26,16 @@ export async function getOffers(
     query = query.eq("merchant.slug", filters.merchant);
   }
   if (filters.category) {
-    query = query.eq("merchant.category_id", filters.category);
+    // Category filter comes as a slug string — resolve to UUID first
+    const { data: cat } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("slug", filters.category)
+      .single();
+
+    if (cat) {
+      query = query.eq("merchant.category_id", cat.id);
+    }
   }
   if (filters.payment_app) {
     query = query.eq("payment_app.slug", filters.payment_app);

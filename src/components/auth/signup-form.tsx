@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Mail, Loader2 } from "lucide-react";
+import { Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,12 +19,17 @@ const signupSchema = z.object({
     .min(2, "Name must be at least 2 characters")
     .max(100, "Name too long"),
   email: z.string().email("Please enter a valid email address"),
+  password: z
+    .string()
+    .min(6, "Password must be at least 6 characters")
+    .max(72, "Password too long"),
 });
 
 type SignupInput = z.infer<typeof signupSchema>;
 
 export function SignupForm() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const supabase = getSupabaseBrowserClient();
 
   const {
@@ -35,9 +40,10 @@ export function SignupForm() {
     resolver: zodResolver(signupSchema),
   });
 
-  async function onMagicLink(data: SignupInput) {
-    const { error } = await supabase.auth.signInWithOtp({
+  async function onSignup(data: SignupInput) {
+    const { error } = await supabase.auth.signUp({
       email: data.email,
+      password: data.password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
@@ -47,12 +53,12 @@ export function SignupForm() {
     });
 
     if (error) {
-      toast.error("Failed to send magic link", { description: error.message });
+      toast.error("Sign-up failed", { description: error.message });
       return;
     }
 
-    toast.success("Check your email!", {
-      description: "We sent you a magic link to create your account.",
+    toast.success("Account created!", {
+      description: "Check your email to verify your account before logging in.",
     });
   }
 
@@ -113,8 +119,8 @@ export function SignupForm() {
           </span>
         </div>
 
-        {/* Magic Link Sign-up */}
-        <form onSubmit={handleSubmit(onMagicLink)} className="space-y-3">
+        {/* Email + Password Sign-up */}
+        <form onSubmit={handleSubmit(onSignup)} className="space-y-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium">Full Name</label>
             <Input
@@ -136,6 +142,26 @@ export function SignupForm() {
               <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
             )}
           </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Password</label>
+            <div className="relative">
+              <Input
+                {...register("password")}
+                type={showPassword ? "text" : "password"}
+                placeholder="Min 6 characters"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>
+            )}
+          </div>
           <Button
             type="submit"
             disabled={isSubmitting}
@@ -144,9 +170,9 @@ export function SignupForm() {
             {isSubmitting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Mail className="mr-2 h-4 w-4" />
+              <UserPlus className="mr-2 h-4 w-4" />
             )}
-            Send Magic Link
+            Create Account
           </Button>
         </form>
 
