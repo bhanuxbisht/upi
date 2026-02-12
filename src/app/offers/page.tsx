@@ -111,10 +111,12 @@ const DEMO_OFFERS = [
 
 export default function OffersPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 pt-32 pb-16 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Live Cashback Offers</h1>
+      <div className="mb-10">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          Live Cashback Offers
+        </h1>
         <p className="mt-2 text-muted-foreground">
           {DEMO_OFFERS.length} active offers across {PAYMENT_APPS.length} payment apps.
           Updated daily.
@@ -129,7 +131,7 @@ export default function OffersPage() {
             paymentApps={PAYMENT_APPS.map((a) => ({ name: a.name, slug: a.slug }))}
           />
         </aside>
-        <div className="space-y-4">
+        <div className="space-y-6">
           {DEMO_OFFERS.map((offer) => (
             <OfferCard key={offer.id} offer={offer} />
           ))}

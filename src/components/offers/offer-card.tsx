@@ -33,61 +33,76 @@ export function OfferCard({ offer }: OfferCardProps) {
   );
 
   return (
-    <Card className="transition-shadow hover:shadow-md">
+    <Card className="group overflow-hidden border-border/50 bg-background/50 backdrop-blur-sm transition-all hover:border-emerald-200 hover:bg-emerald-50/10 hover:shadow-lg dark:hover:border-emerald-900/50 dark:hover:bg-emerald-900/10">
       <CardContent className="p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           {/* Left: Info */}
-          <div className="flex-1 space-y-2">
+          <div className="flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge
-                className="text-white text-xs"
+                className="border-0 text-white px-2.5 py-0.5 text-xs font-semibold shadow-sm"
                 style={{ backgroundColor: offer.payment_app.color }}
               >
                 {offer.payment_app.name}
               </Badge>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="bg-muted/50 text-xs font-medium text-muted-foreground">
                 {offer.category}
               </Badge>
               {offer.verified_count >= 10 && (
-                <Badge variant="outline" className="gap-1 text-xs text-emerald-600">
+                <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-400">
                   <CheckCircle2 className="h-3 w-3" />
                   Verified ({offer.verified_count})
                 </Badge>
               )}
             </div>
 
-            <h3 className="text-base font-semibold">{offer.title}</h3>
-            <p className="text-sm text-muted-foreground">{offer.description}</p>
+            <div>
+              <h3 className="text-lg font-bold tracking-tight text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
+                {offer.title}
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                {offer.description}
+              </p>
+            </div>
 
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-muted-foreground/80">
               {offer.min_transaction && (
-                <span>Min: ₹{offer.min_transaction}</span>
+                <span className="flex items-center gap-1">
+                  Min Spend: <span className="text-foreground">₹{offer.min_transaction}</span>
+                </span>
               )}
               {offer.max_cashback && (
-                <span>Max: ₹{offer.max_cashback}</span>
+                <span className="flex items-center gap-1">
+                  Max Cap: <span className="text-foreground">₹{offer.max_cashback}</span>
+                </span>
               )}
-              <span>
-                {daysLeft > 0 ? `${daysLeft} days left` : "Expiring today"}
+              <span className={daysLeft <= 3 ? "text-amber-600 dark:text-amber-400" : ""}>
+                {daysLeft > 0 ? `Ends in ${daysLeft} days` : "Expiring today"}
               </span>
             </div>
 
             {offer.promo_code && (
-              <div className="inline-flex items-center gap-2 rounded-md border border-dashed border-emerald-300 bg-emerald-50 px-3 py-1.5">
-                <code className="text-sm font-semibold text-emerald-700">
+              <div className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50/50 px-3 py-1.5 transition-colors hover:bg-emerald-100/50 dark:border-emerald-800 dark:bg-emerald-900/20">
+                <code className="text-sm font-bold tracking-wide text-emerald-700 dark:text-emerald-400">
                   {offer.promo_code}
                 </code>
-                <Copy className="h-3.5 w-3.5 cursor-pointer text-emerald-600" />
+                <Copy className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               </div>
             )}
           </div>
 
-          {/* Right: Savings badge */}
-          <div className="flex flex-col items-center rounded-lg bg-emerald-50 px-4 py-3 text-center sm:min-w-[120px]">
-            <span className="text-xs text-muted-foreground">You save</span>
-            <span className="text-lg font-bold text-emerald-700">
-              {savingsDisplay}
-            </span>
-            <span className="text-xs text-muted-foreground">
+          {/* Right: Savings Box */}
+          <div className="flex shrink-0 flex-col items-end gap-2 sm:items-center">
+            <div className="flex min-w-[140px] flex-col items-center justify-center rounded-xl bg-emerald-50 px-4 py-3 text-center dark:bg-emerald-900/10">
+              <span className="text-xs font-medium text-emerald-600/80 dark:text-emerald-400/80">
+                Estimated Savings
+              </span>
+              <span className="text-xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400">
+                {savingsDisplay}
+              </span>
+            </div>
+            {/* Merchant Name */}
+            <span className="text-xs font-medium text-muted-foreground/60">
               at {offer.merchant.name}
             </span>
           </div>

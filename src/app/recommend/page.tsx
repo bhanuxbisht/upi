@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 
 export default function RecommendPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-3xl px-4 pt-32 pb-16 sm:px-6 lg:px-8">
       <div className="text-center">
-        <h1 className="text-3xl font-bold sm:text-4xl">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           Best Way to Pay
         </h1>
         <p className="mt-3 text-muted-foreground">
