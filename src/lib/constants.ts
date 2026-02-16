@@ -7,6 +7,15 @@ export const APP_DESCRIPTION =
 
 export const ITEMS_PER_PAGE = 20;
 
+/**
+ * Admin whitelist — only these emails can access /admin.
+ * Add your Supabase Auth email here.
+ * Example: ["bhanu@yourdomain.com"]
+ */
+export const ADMIN_EMAILS: string[] = [
+  "yogendrabisht0617@gmail.com",
+];
+
 export const CATEGORIES = [
   { name: "Food Delivery", slug: "food-delivery", icon: "🍕" },
   { name: "Groceries", slug: "groceries", icon: "🛒" },

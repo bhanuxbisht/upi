@@ -81,3 +81,31 @@ export const offerFilterSchema = z.object({
 });
 
 export type OfferFilterInput = z.infer<typeof offerFilterSchema>;
+
+/** Admin — create offer directly */
+export const adminOfferSchema = z.object({
+  merchant_id: z.string().uuid("Select a merchant"),
+  payment_app_id: z.string().uuid("Select a payment app"),
+  type: z.enum(["cashback", "discount", "reward_points", "coupon", "bogo"]),
+  title: z
+    .string()
+    .min(5, "Title must be at least 5 characters")
+    .max(200),
+  description: z
+    .string()
+    .min(10, "Description must be at least 10 characters")
+    .max(2000),
+  cashback_amount: z.number().positive().nullable().optional(),
+  cashback_percent: z.number().positive().max(100).nullable().optional(),
+  max_cashback: z.number().positive().nullable().optional(),
+  min_transaction: z.number().positive().nullable().optional(),
+  promo_code: z.string().max(50).nullable().optional(),
+  valid_from: z.string().optional(),
+  valid_to: z.string().min(1, "Expiry date is required"),
+  terms: z.string().max(2000).nullable().optional(),
+  source_url: z.string().url("Invalid URL").or(z.literal("")).nullable().optional(),
+  status: z.enum(["active", "pending"]),
+});
+
+export type AdminOfferInput = z.infer<typeof adminOfferSchema>;
+
