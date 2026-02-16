@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Copy } from "lucide-react";
 import type { OfferWithRelations } from "@/types";
+import { TrackSavingButton } from "@/components/savings/track-saving-button";
 
 interface OfferCardProps {
   offer: OfferWithRelations;
@@ -91,6 +92,14 @@ export function OfferCard({ offer }: OfferCardProps) {
             <span className="text-xs font-medium text-muted-foreground/60">
               at {offer.merchant.name}
             </span>
+            {/* Track Saving Button */}
+            <TrackSavingButton
+              offerId={offer.id}
+              merchantName={offer.merchant.name}
+              paymentAppName={offer.payment_app.name}
+              category={offer.merchant.slug}
+              estimatedSaving={offer.cashback_amount ?? undefined}
+            />
           </div>
         </div>
       </CardContent>

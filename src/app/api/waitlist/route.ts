@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { waitlistSchema } from "@/lib/validations";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { ApiResponse } from "@/types/api";
+import { authLimiter } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting — max 5 signups per minute per IP
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const rateLimit = authLimiter.check(`waitlist:${ip}`);
+    if (!rateLimit.allowed) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds ?? 60) } }
+      );
+    }
+
     const body = await request.json();
     const parsed = waitlistSchema.safeParse(body);
 

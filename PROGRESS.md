@@ -1,7 +1,7 @@
 # PayWise — Development Progress
 
-> Last updated: **11 February 2026**
-> Status: **MVP Core Built — Awaiting Supabase Credentials**
+> Last updated: **16 February 2026**
+> Status: **MVP Core + Tier 1 Feature (Savings Counter) Complete**
 
 ---
 
@@ -446,20 +446,53 @@ Route (app)
 
 ## 9. Remaining Work
 
+### ✅ Completed - Tier 1 Features (Feb 16, 2026)
+- [x] **💰 Savings Counter System** (P0 - Critical for retention)
+  - [x] Database schema with `user_savings` and `user_savings_stats` tables
+  - [x] Auto-updating triggers for real-time stats
+  - [x] API routes: `/api/savings/track` and `/api/savings/stats`
+  - [x] UI components: SavingsCounter, TrackSavingButton, SavingsHistory
+  - [x] Full savings dashboard page at `/savings`
+  - [x] "I Used This" button integrated into offer cards
+  - [x] Navigation menu updated with "My Savings" link
+
 ### Immediate (Blocked on Supabase Credentials)
 - [ ] Set real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
 - [ ] Run `supabase/schema.sql` in Supabase SQL Editor
+- [ ] **Run `supabase/migrations/002_user_savings.sql`** (NEW - for savings tracking)
 - [ ] Enable Google OAuth provider in Supabase Auth settings
 - [ ] Test login/signup flow end-to-end
 - [ ] Test offer submission → appears in dashboard flow
+- [ ] **Test savings tracking flow** (NEW)
+
+### Tier 1 Features - In Progress (Weeks 2-3)
+- [ ] **🔔 "Deal Dying" Push Alerts** (P0 - Creates daily habit)
+  - [ ] Email notification system (Resend integration)
+  - [ ] Push notification setup (Web Push API)
+  - [ ] Cron job to check expiring offers
+  - [ ] User notification preferences
+  - [ ] Alert templates
+
+- [ ] **🏷️ "Offer Stacking" Calculator** (P0 - Killer feature)
+  - [ ] Stacking algorithm: combine UPI + bank + merchant offers
+  - [ ] UI: Interactive stacking calculator
+  - [ ] Show step-by-step breakdown
+  - [ ] "Copy to clipboard" instructions
+
+- [ ] **📊 Weekly Savings Report Email** (P1 - High engagement)
+  - [ ] Email template (React Email)
+  - [ ] Cron job (runs every Sunday 8 AM)
+  - [ ] Personalized content: saved this week, missed deals, upcoming deals
+  - [ ] Unsubscribe management
 
 ### Short Term (After Supabase Connected)
 - [ ] Add more payment apps (Freecharge, Slice, Jupiter, Fi Money, Navi, JioFinancial)
 - [ ] Set up `pg_cron` for hourly offer expiry
+- [ ] **Set up cron for savings streak calculation** (NEW)
 - [ ] Add Supabase Realtime subscription for live offer updates
 - [ ] "Ending Soon" badges on offer cards
 - [ ] User profile page (saved payment preferences)
-- [ ] Admin panel for manual offer entry + approval
+- [ ] Admin panel enhancements (bulk upload, analytics)
 
 ### Medium Term (Week 2-4)
 - [ ] Chrome Extension (see offers while browsing merchant sites)
@@ -468,6 +501,17 @@ Route (app)
 - [ ] Analytics dashboard (Mixpanel integration)
 - [ ] SEO optimization (dynamic OG images, sitemap)
 
+### Tier 2 Features (Weeks 4-8)
+- [ ] **🎮 Gamification: "Savings Streak"** - Daily streaks with multipliers and badges
+- [ ] **🗳️ Community Trust System** - Upvote/downvote offers with verification
+- [ ] **🤖 "Ask PayWise" Smart Assistant** - Natural language payment queries
+- [ ] **📱 Payment App Wallet Balance Tracker** - Track and remind about wallet balances
+
+### Tier 3 Features (Months 2-4)
+- [ ] **🏢 "Smart Bill Pay"** - Recurring payment optimizer
+- [ ] **🧾 Receipt Scanner** - OCR to analyze missed savings
+
 ---
 
 *This file is the single source of truth for session continuity. Update it after each major milestone.*
+

@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { recommendSchema } from "@/lib/validations";
 import { getOffersByMerchantAndAmount } from "@/services/offers";
 import type { ApiResponse, PaymentRecommendation } from "@/types/api";
+import { generalApiLimiter } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting — 60 requests/min per IP
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const rateLimit = generalApiLimiter.check(ip);
+    if (!rateLimit.allowed) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds ?? 60) } }
+      );
+    }
+
     const body = await request.json();
     const parsed = recommendSchema.safeParse(body);
 

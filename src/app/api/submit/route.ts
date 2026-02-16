@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { offerSubmissionSchema } from "@/lib/validations";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { ApiResponse } from "@/types/api";
+import { savingsTrackLimiter } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +17,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<ApiResponse<null>>(
         { success: false, error: "You must be logged in to submit an offer" },
         { status: 401 }
+      );
+    }
+
+    // Rate limiting — max 20 submissions per minute per user
+    const rateLimit = savingsTrackLimiter.check(`submit:${user.id}`);
+    if (!rateLimit.allowed) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: "Too many submissions. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds ?? 60) } }
       );
     }
 
