@@ -29,6 +29,9 @@ export const env = {
   resend: {
     apiKey: getEnv("RESEND_API_KEY", ""),
   },
+  googleAI: {
+    apiKey: getEnv("GOOGLE_AI_API_KEY", ""),
+  },
   mixpanel: {
     token: getPublicEnv("NEXT_PUBLIC_MIXPANEL_TOKEN", ""),
   },

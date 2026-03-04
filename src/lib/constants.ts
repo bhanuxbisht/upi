@@ -42,6 +42,8 @@ export const PAYMENT_APPS = [
 ] as const;
 
 export const NAV_LINKS = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Ask AI", href: "/ask" },
   { label: "Offers", href: "/offers" },
   { label: "Best Way to Pay", href: "/recommend" },
   { label: "My Savings", href: "/savings" },

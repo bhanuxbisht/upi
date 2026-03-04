@@ -1,9 +1,75 @@
-# PayWise — Development Progress
+# PayWise AI — Development Progress
 
-> Last updated: **19 February 2026**
-> Status: **MVP Core + Tier 1 Feature (Savings Counter) Complete | Supabase Connected ✅**
+> Last updated: **4 March 2026**
+> Status: **MVP Core + Savings Counter + PayWise AI Foundation (Phase 1) | Supabase Connected ✅**
 
 ---
+
+## 🆕 PayWise AI — Phase 1 Foundation (March 4, 2026)
+
+### What Was Built
+
+#### AI Chat System ("Ask PayWise")
+- [x] **Google Gemini 2.0 Flash integration** — `src/lib/ai/gemini.ts`
+- [x] **System prompt engineering** — Carefully crafted to prevent hallucination, block sensitive data requests — `src/lib/ai/prompts.ts`
+- [x] **Context builder** — Builds user profile + spending history + savings context for AI — `src/lib/ai/context-builder.ts`
+- [x] **Chat API route** — `/api/ai/chat` with auth, rate limiting, conversation persistence, usage tracking
+- [x] **Chat page** — `/ask` with premium UI, quick actions, message history, usage limits
+
+#### Personal Finance Dashboard
+- [x] **Dashboard page** — `/dashboard` with spending analytics, category breakdown, payment app usage
+- [x] **Spending analytics API** — `/api/analytics/spending`
+- [x] **Transaction service** — Full CRUD + analytics computation — `src/services/transactions.ts`
+
+#### User Profiles & Personalization
+- [x] **Profile service** — Payment preferences, Pro subscription checks, AI usage limits — `src/services/profiles.ts`
+- [x] **Profile API** — `/api/profile` (GET/PATCH)
+- [x] **Transaction API** — `/api/transactions` (GET/POST)
+
+#### Security & Compliance (DPDP Act 2023)
+- [x] **Audit logging** — Every sensitive data access logged — `src/lib/security/audit.ts`
+- [x] **Data export API** — `/api/data/export` — Users can download all their data
+- [x] **Data deletion API** — `/api/data/delete` — Right to Erasure (permanent delete)
+- [x] **RLS on all 7 new tables** — Row-level security for data isolation
+- [x] **AI usage tracking** — Free: 3 queries/day, Pro: unlimited
+
+#### Database Migration
+- [x] **7 new tables** in `supabase/migrations/003_paywise_ai.sql`:
+  - `user_profiles` — Payment preferences, cards, budgets, Pro status
+  - `user_transactions` — Transaction journal with auto-computed missed savings
+  - `ai_conversations` — Chat history with LLM context
+  - `user_offer_matches` — Personalized offer scoring
+  - `audit_logs` — Security compliance
+  - `consent_records` — DPDP Act consent management
+  - `ai_usage` — Usage tracking for free/pro limits
+- [x] **Trigger functions** — Auto-calculate missed savings, auto-update timestamps
+- [x] **Analytics views** — Monthly spending by category, payment app usage stats
+
+#### Navigation Update
+- [x] Added "Dashboard" and "Ask AI" to main navigation
+
+### New Routes Added
+| Route | Type | Description |
+|-------|------|-------------|
+| `/ask` | Dynamic | "Ask PayWise" AI chat interface (auth-gated) |
+| `/dashboard` | Dynamic | Personal finance dashboard (auth-gated) |
+| `/api/ai/chat` | POST | AI chat with Gemini, usage limits, conversation persistence |
+| `/api/transactions` | GET/POST | Transaction CRUD with filters |
+| `/api/profile` | GET/PATCH | User profile management |
+| `/api/analytics/spending` | GET | Spending analytics engine |
+| `/api/data/export` | GET | DPDP data export |
+| `/api/data/delete` | DELETE | DPDP right to erasure |
+
+### New Dependencies
+- `@google/generative-ai` — Google Gemini 2.0 Flash SDK
+
+### Setup Required
+1. Run `npm install` to install new dependencies
+2. Add `GOOGLE_AI_API_KEY=your-key-here` to `.env.local`
+3. Run `supabase/migrations/003_paywise_ai.sql` in Supabase SQL Editor
+
+---
+
 
 ## Table of Contents
 
