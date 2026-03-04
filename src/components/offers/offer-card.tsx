@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, Copy } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import type { OfferWithRelations } from "@/types";
 import { TrackSavingButton } from "@/components/savings/track-saving-button";
+import { PromoCopyButton } from "@/components/offers/promo-copy-button";
 
 interface OfferCardProps {
   offer: OfferWithRelations;
@@ -69,12 +70,7 @@ export function OfferCard({ offer }: OfferCardProps) {
             </div>
 
             {offer.promo_code && (
-              <div className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50/50 px-3 py-1.5 transition-colors hover:bg-emerald-100/50 dark:border-emerald-800 dark:bg-emerald-900/20">
-                <code className="text-sm font-bold tracking-wide text-emerald-700 dark:text-emerald-400">
-                  {offer.promo_code}
-                </code>
-                <Copy className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              </div>
+              <PromoCopyButton code={offer.promo_code} />
             )}
           </div>
 

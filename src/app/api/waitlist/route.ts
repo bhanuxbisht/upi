@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       .from("waitlist")
       .select("id")
       .eq("email", email)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       return NextResponse.json<ApiResponse<null>>(

@@ -30,6 +30,7 @@ export interface PaymentApp {
   type: PaymentMethodType;
   logo_url: string | null;
   color: string;
+  supports_upi?: boolean;
   created_at: string;
 }
 

@@ -41,7 +41,11 @@ export async function GET() {
             .from("user_savings_stats")
             .select("*")
             .eq("user_id", user.id)
-            .single();
+            .maybeSingle();
+
+        if (statsError) {
+            console.error("[savings/stats] Stats query failed:", statsError.message);
+        }
 
         // If no stats exist yet, return zeros
         const userStats = stats ?? {
@@ -57,7 +61,7 @@ export async function GET() {
         };
 
         // Fetch recent savings (last 20)
-        const { data: recentSavings, error: savingsError } = await supabase
+        const { data: recentSavings, error: recentError } = await supabase
             .from("user_savings")
             .select(`
                 id,
@@ -73,6 +77,10 @@ export async function GET() {
             .eq("user_id", user.id)
             .order("created_at", { ascending: false })
             .limit(20);
+
+        if (recentError) {
+            console.error("[savings/stats] Recent savings query failed:", recentError.message);
+        }
 
         // Fetch category breakdown
         const { data: categoryBreakdown } = await supabase

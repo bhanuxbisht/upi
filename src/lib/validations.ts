@@ -14,6 +14,9 @@ export const recommendSchema = z.object({
 
 export type RecommendInput = z.infer<typeof recommendSchema>;
 
+/** Helper: transform NaN (from empty number inputs) to undefined */
+const nanToUndefined = z.number().transform((v) => (Number.isNaN(v) ? undefined : v));
+
 /** Offer submission form */
 export const offerSubmissionSchema = z.object({
   merchant_name: z
@@ -32,30 +35,21 @@ export const offerSubmissionSchema = z.object({
     .string()
     .min(10, "Description must be at least 10 characters")
     .max(1000),
-  cashback_amount: z
-    .number()
-    .positive()
-    .nullable()
+  cashback_amount: nanToUndefined
+    .pipe(z.number().positive().optional())
     .optional(),
-  cashback_percent: z
-    .number()
-    .positive()
-    .max(100)
-    .nullable()
+  cashback_percent: nanToUndefined
+    .pipe(z.number().positive().max(100).optional())
     .optional(),
-  max_cashback: z
-    .number()
-    .positive()
-    .nullable()
+  max_cashback: nanToUndefined
+    .pipe(z.number().positive().optional())
     .optional(),
-  min_transaction: z
-    .number()
-    .positive()
-    .nullable()
+  min_transaction: nanToUndefined
+    .pipe(z.number().positive().optional())
     .optional(),
   promo_code: z.string().max(50).nullable().optional(),
   valid_to: z.string().nullable().optional(),
-  source_url: z.string().url("Invalid URL").nullable().optional(),
+  source_url: z.string().url("Invalid URL").or(z.literal("")).nullable().optional(),
 });
 
 export type OfferSubmissionInput = z.infer<typeof offerSubmissionSchema>;

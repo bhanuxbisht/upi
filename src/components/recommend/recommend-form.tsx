@@ -3,54 +3,37 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, ArrowRight, IndianRupee } from "lucide-react";
+import { Search, ArrowRight, IndianRupee, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { recommendSchema, type RecommendInput } from "@/lib/validations";
+import { PAYMENT_APPS } from "@/lib/constants";
 
 interface Recommendation {
+  offer_id?: string;
   app_name: string;
+  app_slug: string;
   app_color: string;
   savings: string;
+  estimated_savings: number;
   detail: string;
   promo_code: string | null;
-  valid_to: string;
+  valid_to: string | null;
 }
 
-// Demo recommendations — replaced with API call once Supabase is connected
-function getDemoRecommendations(merchant: string, amount: number): Recommendation[] {
-  const merchantLower = merchant.toLowerCase();
-
-  const recs: Recommendation[] = [];
-
-  if (merchantLower.includes("swiggy")) {
-    recs.push(
-      { app_name: "PhonePe", app_color: "#5F259F", savings: `₹75 cashback`, detail: `Flat ₹75 on orders above ₹199`, promo_code: null, valid_to: "Feb 28, 2026" },
-      { app_name: "Google Pay", app_color: "#4285F4", savings: `Up to ₹50`, detail: `Scratch card (up to ₹250)`, promo_code: null, valid_to: "Mar 15, 2026" },
-      { app_name: "Amazon Pay", app_color: "#FF9900", savings: `₹${Math.round(amount * 0.05)} back`, detail: `5% back with ICICI credit card`, promo_code: null, valid_to: "Mar 31, 2026" },
-    );
-  } else if (merchantLower.includes("zomato")) {
-    recs.push(
-      { app_name: "Google Pay", app_color: "#4285F4", savings: `₹${Math.min(Math.round(amount * 0.1), 200)} cashback`, detail: `10% back with HDFC card (max ₹200)`, promo_code: "HDFCZOM10", valid_to: "Mar 15, 2026" },
-      { app_name: "PhonePe", app_color: "#5F259F", savings: `₹50 cashback`, detail: `Flat ₹50 on orders above ₹249`, promo_code: null, valid_to: "Feb 25, 2026" },
-      { app_name: "CRED", app_color: "#1A1A2E", savings: `₹40 CRED coins`, detail: `Pay via CRED Pay for bonus coins`, promo_code: null, valid_to: "Mar 1, 2026" },
-    );
-  } else {
-    recs.push(
-      { app_name: "PhonePe", app_color: "#5F259F", savings: `Up to ₹${Math.round(amount * 0.03)}`, detail: `3% cashback via PhonePe UPI (max ₹100)`, promo_code: null, valid_to: "Mar 31, 2026" },
-      { app_name: "Google Pay", app_color: "#4285F4", savings: `Scratch card`, detail: `Win up to ₹250 scratch card`, promo_code: null, valid_to: "Ongoing" },
-      { app_name: "Paytm", app_color: "#00BAF2", savings: `₹10 cashback`, detail: `Flat ₹10 cashback on first txn of the day`, promo_code: null, valid_to: "Feb 28, 2026" },
-    );
-  }
-
-  return recs;
+/** Map app slug to brand color from constants */
+function getAppColor(slug: string): string {
+  const app = PAYMENT_APPS.find((a) => a.slug === slug);
+  return app?.color ?? "#6B7280";
 }
 
 export function RecommendForm() {
   const [results, setResults] = useState<Recommendation[] | null>(null);
   const [queryInfo, setQueryInfo] = useState<{ merchant: string; amount: number } | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const {
     register,
@@ -60,10 +43,65 @@ export function RecommendForm() {
     resolver: zodResolver(recommendSchema),
   });
 
-  function onSubmit(data: RecommendInput) {
-    const recs = getDemoRecommendations(data.merchant, data.amount);
-    setResults(recs);
-    setQueryInfo({ merchant: data.merchant, amount: data.amount });
+  async function onSubmit(data: RecommendInput) {
+    setSearching(true);
+    setResults(null);
+
+    try {
+      const res = await fetch("/api/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchant: data.merchant, amount: data.amount }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        toast.error(json.error || "Failed to fetch recommendations");
+        return;
+      }
+
+      const apiResults: Recommendation[] = (json.data ?? []).map(
+        (rec: {
+          offer_id: string;
+          app_name: string;
+          app_slug: string;
+          offer_title: string;
+          estimated_savings: number;
+          savings_display: string;
+          detail: string;
+          promo_code: string | null;
+          valid_to: string | null;
+        }) => ({
+          offer_id: rec.offer_id,
+          app_name: rec.app_name,
+          app_slug: rec.app_slug,
+          app_color: getAppColor(rec.app_slug),
+          savings: rec.savings_display,
+          estimated_savings: rec.estimated_savings,
+          detail: rec.detail,
+          promo_code: rec.promo_code,
+          valid_to: rec.valid_to
+            ? new Date(rec.valid_to).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })
+            : null,
+        })
+      );
+
+      setResults(apiResults);
+      setQueryInfo({ merchant: data.merchant, amount: data.amount });
+
+      if (apiResults.length === 0) {
+        toast.info("No offers found for this merchant. Try a different name or check our offers page.");
+      }
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setSearching(false);
+    }
   }
 
   return (
@@ -109,11 +147,20 @@ export function RecommendForm() {
 
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || searching}
               className="w-full bg-emerald-600 hover:bg-emerald-700"
             >
-              Find Best Payment Method
-              <ArrowRight className="ml-2 h-4 w-4" />
+              {searching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Finding best deals...
+                </>
+              ) : (
+                <>
+                  Find Best Payment Method
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
           </form>
         </CardContent>
@@ -160,9 +207,11 @@ export function RecommendForm() {
                       Code: {rec.promo_code}
                     </span>
                   )}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Valid till {rec.valid_to}
-                  </p>
+                  {rec.valid_to && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Valid till {rec.valid_to}
+                    </p>
+                  )}
                 </div>
 
                 {/* Savings */}

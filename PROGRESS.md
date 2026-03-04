@@ -1,7 +1,7 @@
 # PayWise — Development Progress
 
-> Last updated: **16 February 2026**
-> Status: **MVP Core + Tier 1 Feature (Savings Counter) Complete**
+> Last updated: **19 February 2026**
+> Status: **MVP Core + Tier 1 Feature (Savings Counter) Complete | Supabase Connected ✅**
 
 ---
 
@@ -9,7 +9,7 @@
 
 1. [What's Been Built](#1-whats-been-built)
 2. [Supabase Placeholder Workaround (What Changed & Why)](#2-supabase-placeholder-workaround)
-3. [What You Need To Do Next (Supabase Setup)](#3-what-you-need-to-do-next)
+3. [Supabase Setup — ✅ COMPLETE](#3-supabase-setup--complete)
 4. [How To Restore Real Supabase Connection](#4-how-to-restore-real-supabase-connection)
 5. [Adding More Real-Time Payment Apps](#5-adding-more-real-time-payment-apps)
 6. [Offer Expiry & Auto-Rotation Strategy](#6-offer-expiry--auto-rotation-strategy)
@@ -31,24 +31,33 @@
 | `/submit` | Static | Community offer submission form (merchant, app, cashback, promo code, etc.) |
 | `/login` | Dynamic | Login page — Google OAuth + Email Magic Link |
 | `/signup` | Dynamic | Sign-up page — Google OAuth + Email Magic Link |
+| `/savings` | Dynamic | My Savings dashboard (auth-gated) |
+| `/admin` | Dynamic | Admin panel (role-gated, email whitelist) |
+| `/extension` | Static | Chrome Extension coming soon page |
 | `/auth/callback` | Dynamic | Supabase OAuth callback handler (exchanges code for session) |
 
 ### API Routes
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/offers` | GET | Filtered + paginated offer listing with Zod validation |
-| `/api/recommend` | POST | Recommendation engine — takes merchant + amount, returns ranked offers by savings |
-| `/api/submit` | POST | Authenticated offer submission (requires login) |
-| `/api/waitlist` | POST | Waitlist email signup |
+| Endpoint | Method | Description | Rate Limit |
+|----------|--------|-------------|------------|
+| `/api/offers` | GET | Filtered + paginated offer listing with Zod validation | 60/min (IP) |
+| `/api/recommend` | POST | Recommendation engine — takes merchant + amount, returns ranked offers by savings | 60/min (IP) |
+| `/api/submit` | POST | Authenticated offer submission (requires login) | 20/min (User) |
+| `/api/waitlist` | POST | Waitlist email signup | 5/min (IP) |
+| `/api/savings/track` | POST | Log a saving event (auth + rate-limited) | 20/min (User) |
+| `/api/savings/stats` | GET | Get savings stats (auth + rate-limited) | 30/min (User) |
+| `/api/admin/offers` | POST | Admin: create/manage offers | Admin only |
+| `/api/admin/submissions` | GET/PATCH | Admin: review community submissions | Admin only |
 
 ### Infrastructure
 
 - **Next.js 16.1.6** (App Router, Turbopack, TypeScript strict)
-- **Tailwind CSS v4 + shadcn/ui** (13 components: button, card, input, badge, separator, sheet, dialog, dropdown-menu, select, textarea, sonner, tabs, avatar)
-- **Supabase** (@supabase/supabase-js v2.95.3, @supabase/ssr v0.8.0)
+- **Tailwind CSS v4 + shadcn/ui** (14 components: button, card, input, badge, separator, sheet, dialog, dropdown-menu, select, textarea, sonner, tabs, avatar, label)
+- **Supabase** (@supabase/supabase-js v2.95.3, @supabase/ssr v0.8.0) — **Connected ✅**
 - **Zod v4** for all input validation
 - **react-hook-form** with @hookform/resolvers
+- **Rate limiting** on all API routes (in-memory, 4 presets)
+- **Admin RBAC** — email whitelist + service role client
 - **Proxy (middleware)** — refreshes Supabase auth session on every request
 - **Complete SQL schema** with 10 categories, 9 payment apps, 15 merchants, 6 sample offers
 
@@ -58,12 +67,7 @@
 
 ### The Problem
 
-The `.env.local` file has **placeholder values** (not real Supabase credentials):
-
-```
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-```
+The `.env.local` file originally had **placeholder values** (not real Supabase credentials).
 
 The Supabase SDK (`@supabase/ssr`) **crashes** if you pass an invalid URL to `createBrowserClient()` or `createServerClient()`. It throws:
 
@@ -71,112 +75,43 @@ The Supabase SDK (`@supabase/ssr`) **crashes** if you pass an invalid URL to `cr
 Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
 ```
 
-This killed both `npm run build` and `npm run dev`.
-
 ### What I Changed (3 Files)
 
 #### File 1: `src/lib/supabase/client.ts` (Browser Client)
 
-**Before** — would crash immediately:
+Checks if credentials are real, falls back to a dummy URL that won't crash:
 ```ts
-client = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-```
-
-**After** — checks if credentials are real, falls back to a dummy URL that won't crash:
-```ts
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 0;
-
-// If not configured, uses "https://placeholder.supabase.co" + "placeholder-key"
-// The client initializes without crashing, but all queries will fail gracefully.
-// A console.warn is logged: "[PayWise] Supabase is not configured..."
 ```
 
 #### File 2: `src/lib/supabase/server.ts` (Server Client)
 
-Same pattern — checks `isConfigured`, uses placeholder URL if not. Logs a warning.
+Same pattern — checks `isConfigured`, uses placeholder URL if not.
 
 #### File 3: `src/lib/supabase/middleware.ts` (Proxy/Middleware Helper)
 
-Same pattern, but also **skips the entire session refresh** if not configured:
-```ts
-if (!isConfigured) return supabaseResponse; // Just pass through, don't call Supabase
-```
+Same pattern, but also **skips the entire session refresh** if not configured.
 
-### What This Means
-
-- The app **runs and builds perfectly** without real Supabase credentials
-- All pages render, all routes compile, dev server works
-- Auth features (login/signup/Google OAuth) will show the UI but won't work until credentials are set
-- API routes that query the database will return errors gracefully (not crash)
-- **Once you provide real credentials, zero code changes needed** — the `isConfigured` check will pass and everything connects automatically
+### Status: ✅ Real credentials are now set — `isConfigured` checks pass automatically.
 
 ---
 
-## 3. What You Need To Do Next
+## 3. Supabase Setup — ✅ COMPLETE
 
-### Step 1: Create a Supabase Project
+> All Supabase setup tasks completed on **19 February 2026**.
 
-1. Go to [supabase.com](https://supabase.com) → "New Project"
-2. Pick a name (e.g. `paywise`), set a DB password, choose a region (Mumbai `ap-south-1` is ideal for Indian users)
-3. Wait ~2 minutes for the project to spin up
-
-### Step 2: Get Your Credentials
-
-1. Go to **Settings → API** in your Supabase dashboard
-2. Copy these two values:
-   - **Project URL** → looks like `https://abcdefghij.supabase.co`
-   - **anon / public key** → a long JWT string starting with `eyJ...`
-
-### Step 3: Update `.env.local`
-
-Open `paywise/.env.local` and replace the placeholders:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT-ID.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...your-key
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...your-service-key
-```
-
-### Step 4: Run the Database Schema
-
-1. Go to **SQL Editor** in your Supabase dashboard
-2. Paste the entire contents of `paywise/supabase/schema.sql`
-3. Click **Run** — this creates all tables, indexes, RLS policies, and seeds initial data
-
-### Step 5: Enable Google OAuth (Optional but Recommended)
-
-1. Go to **Authentication → Providers → Google**
-2. Enable it, paste your Google OAuth Client ID and Secret
-3. Set the redirect URL to: `http://localhost:3000/auth/callback` (dev) or your production URL
-
-### Step 6: Restart Dev Server
-
-```bash
-npm run dev
-```
-
-The `[PayWise] Supabase is not configured` warning will disappear, and everything will connect to your real database.
+- [x] Set real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
+- [x] Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`
+- [x] Run `supabase/schema.sql` in Supabase SQL Editor
+- [x] Run `supabase/migrations/002_user_savings.sql` in Supabase SQL Editor
+- [x] Enable Google OAuth provider in Supabase Auth settings
+- [x] Database connected and operational
 
 ---
 
 ## 4. How To Restore Real Supabase Connection
 
-**You don't need to change any code.** The placeholder workaround is designed to be transparent:
-
-1. When `.env.local` has placeholder values → `isConfigured = false` → uses dummy URL, logs warning
-2. When `.env.local` has real values → `isConfigured = true` → connects to your real Supabase instance
-
-The check is simple:
-```ts
-const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 0;
-```
-
-Since `"your-supabase-url"` doesn't start with `"http"`, it's treated as unconfigured. Once you set a real URL like `https://abc.supabase.co`, it auto-connects.
+**No longer needed — Supabase is connected.** The `isConfigured` checks remain in the code as a safety net but are now passing with real credentials.
 
 ---
 
@@ -235,23 +170,9 @@ INSERT INTO payment_apps (name, slug, logo_url, color, supports_upi) VALUES
 
 This component auto-reads from `PAYMENT_APPS` constant, so **no change needed there** — it picks up new apps automatically.
 
-### For Real-Time App Discovery (Future)
-
-When we scale, we'll build a scraper/admin panel to:
-- Auto-detect new payment apps from NPCI's UPI ecosystem list
-- Track app-specific offers via their developer APIs / partner feeds
-- Let admins add apps from a dashboard without touching code
-
 ---
 
 ## 6. Offer Expiry & Auto-Rotation Strategy
-
-### The Problem
-
-Every cashback offer has an expiry date (`valid_to`). When an offer expires:
-- It should stop showing in results immediately
-- The next best active offer for the same merchant + payment app should take its place
-- Users shouldn't see stale or expired deals
 
 ### Current Implementation
 
@@ -279,77 +200,12 @@ All queries in the service layer filter by:
 
 So expired offers are **automatically excluded** from all API responses.
 
-#### What Happens When An Offer Expires
+### Planned Enhancements
 
-1. **Offer Dashboard (`/offers`)** — The expired offer simply disappears from the list. The next offer in the sorted order (by `verified_count` then `created_at`) fills its place.
-
-2. **Recommendation Engine (`/api/recommend`)** — When a user asks "best way to pay ₹500 at Swiggy":
-   - The query filters `valid_to >= NOW()` — expired offers are skipped
-   - Remaining active offers are ranked by estimated savings
-   - The #1 recommendation is always the best *currently active* offer
-   - If PhonePe's Swiggy offer expired but Google Pay's is still active, Google Pay moves to #1
-
-3. **No Manual Intervention Needed** — The rotation is automatic because we always query active + non-expired.
-
-### How To Make This Even Better (Planned Enhancements)
-
-#### A. Supabase Cron for Auto-Expiry
-
-Set up a Supabase pg_cron job to run `expire_old_offers()` every hour:
-
-```sql
--- Run in Supabase SQL Editor after enabling pg_cron extension
-SELECT cron.schedule(
-  'expire-old-offers',
-  '0 * * * *',  -- Every hour
-  $$ SELECT expire_old_offers(); $$
-);
-```
-
-This ensures offers are marked `expired` in the database even before a user queries them.
-
-#### B. Real-Time Offer Refresh (Supabase Realtime)
-
-Subscribe to offer changes on the client so the UI updates live:
-
-```ts
-// Future: src/hooks/use-realtime-offers.ts
-const channel = supabase
-  .channel("offers-changes")
-  .on("postgres_changes", {
-    event: "*",
-    schema: "public",
-    table: "offers",
-  }, (payload) => {
-    // Refresh the offers list when any offer is inserted/updated/deleted
-    router.refresh();
-  })
-  .subscribe();
-```
-
-This means if an admin adds a new offer or one expires, all connected users see the update **instantly** without refreshing.
-
-#### C. "Offer Ending Soon" Badges
-
-Add visual urgency indicators:
-
-- **< 24 hours left** → Red "Ending Today!" badge
-- **< 3 days left** → Orange "Ending Soon" badge
-- **< 7 days left** → Yellow "This Week" badge
-
-Already have the data (`valid_to`) — just need to add the badge logic to `offer-card.tsx`.
-
-#### D. Notification When Better Offer Appears
-
-If a user saved a particular merchant (e.g. Swiggy), and a new higher-cashback offer appears:
-- Send a push notification or email: "New deal! PhonePe now offers ₹100 cashback on Swiggy (was ₹50)"
-- This uses Supabase Edge Functions + Resend email API
-
-#### E. Offer Priority Queue
-
-When multiple offers exist for the same merchant + payment app:
-- Rank by: `verified_count` (community trust) → `cashback_amount` (highest first) → `valid_to` (furthest expiry first)
-- This is already the default sort in `getOffers()` service
+- **Supabase pg_cron** — run `expire_old_offers()` every hour
+- **Supabase Realtime** — live offer refresh on the client
+- **"Ending Soon" badges** — urgency indicators on offer cards
+- **Push notifications** — alert users when better offers appear
 
 ---
 
@@ -357,13 +213,15 @@ When multiple offers exist for the same merchant + payment app:
 
 ```
 paywise/
-├── .env.local                          # ← PUT YOUR SUPABASE CREDENTIALS HERE
+├── .env.local                          # Supabase credentials ✅ CONFIGURED
 ├── next.config.ts                      # Next.js config (turbopack root set)
 ├── package.json                        # Dependencies
 ├── supabase/
-│   └── schema.sql                      # Complete DB schema + seed data
+│   ├── schema.sql                      # Complete DB schema + seed data ✅ RUN
+│   └── migrations/
+│       └── 002_user_savings.sql        # User savings tracking ✅ RUN
 ├── src/
-│   ├── proxy.ts                        # Auth session refresh (was middleware.ts)
+│   ├── proxy.ts                        # Auth session refresh
 │   ├── app/
 │   │   ├── layout.tsx                  # Root layout (Navbar + Footer + Toaster)
 │   │   ├── page.tsx                    # Homepage
@@ -372,45 +230,44 @@ paywise/
 │   │   ├── offers/page.tsx             # Offer dashboard
 │   │   ├── recommend/page.tsx          # "Best Way to Pay"
 │   │   ├── submit/page.tsx             # Submit an offer
+│   │   ├── savings/page.tsx            # My Savings dashboard
+│   │   ├── admin/page.tsx              # Admin panel
+│   │   ├── extension/page.tsx          # Chrome Extension coming soon
 │   │   ├── auth/callback/route.ts      # OAuth callback
 │   │   └── api/
 │   │       ├── offers/route.ts         # GET offers
 │   │       ├── recommend/route.ts      # POST recommendations
 │   │       ├── submit/route.ts         # POST offer submission
-│   │       └── waitlist/route.ts       # POST waitlist signup
+│   │       ├── waitlist/route.ts       # POST waitlist signup
+│   │       ├── savings/
+│   │       │   ├── track/route.ts      # POST log a saving event
+│   │       │   └── stats/route.ts      # GET savings stats
+│   │       └── admin/
+│   │           ├── offers/route.ts     # Admin: create/manage offers
+│   │           └── submissions/route.ts # Admin: review submissions
 │   ├── components/
-│   │   ├── auth/
-│   │   │   ├── login-form.tsx          # Google + Magic Link login
-│   │   │   ├── signup-form.tsx         # Google + Magic Link signup
-│   │   │   └── index.ts
-│   │   ├── layout/
-│   │   │   ├── navbar.tsx              # Responsive navbar
-│   │   │   ├── footer.tsx              # Footer
-│   │   │   └── index.ts
-│   │   ├── offers/
-│   │   │   ├── offer-card.tsx          # Individual offer card
-│   │   │   └── offer-filters.tsx       # Search + filter sidebar
-│   │   ├── recommend/
-│   │   │   └── recommend-form.tsx      # Recommendation form + demo results
-│   │   └── submit/
-│   │       └── submit-offer-form.tsx   # Full offer submission form
+│   │   ├── auth/                       # Login + signup forms
+│   │   ├── layout/                     # Navbar, footer, marquee
+│   │   ├── offers/                     # Offer card + filters
+│   │   ├── recommend/                  # Recommendation form
+│   │   ├── submit/                     # Submit offer form
+│   │   ├── savings/                    # Savings counter, tracker, history
+│   │   ├── admin/                      # Admin dashboard, offer table, submissions
+│   │   └── ui/                         # 14 shadcn/ui components
 │   ├── lib/
 │   │   ├── constants.ts                # App name, categories, payment apps, nav links
 │   │   ├── env.ts                      # Typed env var helpers
-│   │   ├── validations.ts             # Zod schemas for all inputs
-│   │   └── supabase/
-│   │       ├── client.ts               # Browser client (with placeholder fallback)
-│   │       ├── server.ts               # Server client (with placeholder fallback)
-│   │       ├── middleware.ts            # Proxy helper (skips if not configured)
-│   │       └── index.ts
+│   │   ├── utils.ts                    # cn() utility
+│   │   ├── validations.ts             # All Zod schemas
+│   │   ├── rate-limit.ts              # In-memory rate limiter
+│   │   ├── admin-auth.ts              # verifyAdmin() helper
+│   │   └── supabase/                   # Browser, server, middleware, admin clients
 │   ├── services/
-│   │   ├── offers.ts                   # getOffers, getOfferById, getTrendingOffers, getOffersByMerchantAndAmount
-│   │   ├── lookups.ts                  # getCategories, getMerchants, getPaymentApps
-│   │   └── index.ts
+│   │   ├── offers.ts                   # Offer CRUD services
+│   │   └── lookups.ts                  # Categories, merchants, payment apps
 │   └── types/
-│       ├── database.ts                 # DB types (Offer, Merchant, PaymentApp, User, etc.)
-│       ├── api.ts                      # API response types (ApiResponse, PaymentRecommendation)
-│       └── index.ts
+│       ├── database.ts                 # All DB types
+│       └── api.ts                      # API response types
 ```
 
 ---
@@ -421,30 +278,19 @@ paywise/
 ✅ npm run build — PASSES (0 errors, 0 warnings)
 ✅ npm run dev   — All pages serve 200 OK
 ✅ TypeScript    — Strict mode, no errors
-✅ 12 routes compiled successfully
-```
-
-### Route Summary
-
-```
-Route (app)
-├ ● /                    (Static)
-├ ● /_not-found          (Static)
-├ ƒ /api/offers          (Dynamic)
-├ ƒ /api/recommend       (Dynamic)
-├ ƒ /api/submit          (Dynamic)
-├ ƒ /api/waitlist        (Dynamic)
-├ ƒ /auth/callback       (Dynamic)
-├ ƒ /login               (Dynamic)
-├ ● /offers              (Static)
-├ ● /recommend           (Static)
-├ ƒ /signup              (Dynamic)
-└ ● /submit              (Static)
+✅ Supabase      — Connected and operational
 ```
 
 ---
 
 ## 9. Remaining Work
+
+### ✅ Completed - Supabase Setup (Feb 19, 2026)
+- [x] Set real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
+- [x] Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`
+- [x] Run `supabase/schema.sql` in Supabase SQL Editor
+- [x] Run `supabase/migrations/002_user_savings.sql` in Supabase SQL Editor
+- [x] Enable Google OAuth provider in Supabase Auth settings
 
 ### ✅ Completed - Tier 1 Features (Feb 16, 2026)
 - [x] **💰 Savings Counter System** (P0 - Critical for retention)
@@ -456,14 +302,25 @@ Route (app)
   - [x] "I Used This" button integrated into offer cards
   - [x] Navigation menu updated with "My Savings" link
 
-### Immediate (Blocked on Supabase Credentials)
-- [ ] Set real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
-- [ ] Run `supabase/schema.sql` in Supabase SQL Editor
-- [ ] **Run `supabase/migrations/002_user_savings.sql`** (NEW - for savings tracking)
-- [ ] Enable Google OAuth provider in Supabase Auth settings
+### ✅ Completed - Admin Panel (Feb 16, 2026)
+- [x] Admin dashboard with tabs
+- [x] Add offer form
+- [x] Offer table management
+- [x] Submission review system
+- [x] Role-gated access (email whitelist)
+
+### ✅ Completed - Security Hardening (Feb 16, 2026)
+- [x] Rate limiting on all 6 API routes
+- [x] Input validation (Zod + SQL CHECK constraints)
+- [x] RLS enabled on all tables
+- [x] IDOR protection
+- [x] Admin RBAC
+
+### 🔲 Testing (Now Unblocked)
 - [ ] Test login/signup flow end-to-end
 - [ ] Test offer submission → appears in dashboard flow
-- [ ] **Test savings tracking flow** (NEW)
+- [ ] Test savings tracking flow
+- [ ] Test admin panel CRUD operations
 
 ### Tier 1 Features - In Progress (Weeks 2-3)
 - [ ] **🔔 "Deal Dying" Push Alerts** (P0 - Creates daily habit)

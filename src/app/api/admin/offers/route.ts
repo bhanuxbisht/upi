@@ -95,12 +95,28 @@ export async function PATCH(request: NextRequest) {
         if ("error" in auth) return auth.error;
         const { supabase } = auth;
 
-        const body = await request.json();
-        const { id, status } = body;
-
-        if (!id || !status) {
+        let body: unknown;
+        try {
+            body = await request.json();
+        } catch {
             return NextResponse.json(
-                { success: false, error: "id and status are required" },
+                { success: false, error: "Invalid JSON body" },
+                { status: 400 }
+            );
+        }
+
+        const { id, status } = body as Record<string, unknown>;
+        const VALID_STATUSES = ["active", "pending", "expired", "rejected"];
+
+        if (!id || typeof id !== "string") {
+            return NextResponse.json(
+                { success: false, error: "id is required and must be a string" },
+                { status: 400 }
+            );
+        }
+        if (!status || typeof status !== "string" || !VALID_STATUSES.includes(status)) {
+            return NextResponse.json(
+                { success: false, error: `status must be one of: ${VALID_STATUSES.join(", ")}` },
                 { status: 400 }
             );
         }

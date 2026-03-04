@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { TrendingUp, Wallet, Calendar, Award } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface SavingsStats {
     total_saved: number;
@@ -24,22 +25,34 @@ export function SavingsCounter({ variant = "compact", className = "" }: SavingsC
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchStats();
-    }, []);
+        let cancelled = false;
 
-    async function fetchStats() {
-        try {
-            const res = await fetch("/api/savings/stats");
-            if (res.ok) {
-                const json = await res.json();
-                setStats(json.data?.stats ?? null);
+        async function checkAuthAndFetch() {
+            try {
+                const supabase = getSupabaseBrowserClient();
+                const { data: { session } } = await supabase.auth.getSession();
+
+                // Skip API call entirely for unauthenticated users
+                if (!session) {
+                    if (!cancelled) setLoading(false);
+                    return;
+                }
+
+                const res = await fetch("/api/savings/stats");
+                if (res.ok && !cancelled) {
+                    const json = await res.json();
+                    setStats(json.data?.stats ?? null);
+                }
+            } catch (error) {
+                console.error("Failed to fetch savings stats:", error);
+            } finally {
+                if (!cancelled) setLoading(false);
             }
-        } catch (error) {
-            console.error("Failed to fetch savings stats:", error);
-        } finally {
-            setLoading(false);
         }
-    }
+
+        checkAuthAndFetch();
+        return () => { cancelled = true; };
+    }, []);
 
     if (loading) {
         return (
