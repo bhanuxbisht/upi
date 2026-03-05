@@ -98,7 +98,7 @@ export default function DashboardPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950">
+            <div className="min-h-screen bg-background text-foreground">
                 <div className="mx-auto max-w-6xl px-4 py-8">
                     <div className="grid gap-4 md:grid-cols-4">
                         {[...Array(4)].map((_, i) => (
@@ -116,15 +116,15 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950">
-            <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="min-h-screen bg-background text-foreground pt-24 md:pt-28">
+            <div className="mx-auto max-w-6xl px-4 pb-8 md:pb-12">
                 {/* Header */}
-                <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-white sm:text-3xl">
-                            Your Finance Dashboard
+                        <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
+                            Dashboard
                         </h1>
-                        <p className="mt-1 text-sm text-zinc-400 sm:text-base">
+                        <p className="mt-2 text-sm text-muted-foreground sm:text-base">
                             Track spending, savings, and discover smarter ways to pay
                         </p>
                     </div>
@@ -328,60 +328,60 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Quick Links */}
-                <div className="mt-8 grid gap-4 md:grid-cols-3">
+                <div className="mt-10 grid gap-4 md:grid-cols-3">
                     <Link href="/offers">
-                        <Card className="group cursor-pointer border-zinc-800 bg-zinc-900/50 transition-all hover:border-emerald-500/50">
+                        <Card className="group cursor-pointer border-border bg-card transition-all hover:bg-muted/50 shadow-sm">
                             <CardContent className="flex items-center justify-between p-5">
                                 <div className="flex items-center gap-3">
-                                    <div className="rounded-lg bg-emerald-600/10 p-2">
-                                        <Sparkles className="h-5 w-5 text-emerald-500" />
+                                    <div className="rounded-lg bg-emerald-500/10 p-2 border border-emerald-500/20">
+                                        <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                                     </div>
                                     <div>
-                                        <p className="font-medium text-white">Browse Offers</p>
-                                        <p className="text-xs text-zinc-500">
+                                        <p className="font-medium text-foreground">Browse Offers</p>
+                                        <p className="text-xs text-muted-foreground">
                                             All active cashback deals
                                         </p>
                                     </div>
                                 </div>
-                                <ChevronRight className="h-5 w-5 text-zinc-600 transition-transform group-hover:translate-x-1" />
+                                <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
                             </CardContent>
                         </Card>
                     </Link>
 
                     <Link href="/ask">
-                        <Card className="group cursor-pointer border-zinc-800 bg-zinc-900/50 transition-all hover:border-emerald-500/50">
+                        <Card className="group cursor-pointer border-border bg-card transition-all hover:bg-muted/50 shadow-sm">
                             <CardContent className="flex items-center justify-between p-5">
                                 <div className="flex items-center gap-3">
-                                    <div className="rounded-lg bg-blue-600/10 p-2">
-                                        <Sparkles className="h-5 w-5 text-blue-500" />
+                                    <div className="rounded-lg bg-blue-500/10 p-2 border border-blue-500/20">
+                                        <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                     </div>
                                     <div>
-                                        <p className="font-medium text-white">Ask PayWise AI</p>
-                                        <p className="text-xs text-zinc-500">
+                                        <p className="font-medium text-foreground">Ask PayWise AI</p>
+                                        <p className="text-xs text-muted-foreground">
                                             Get personalized advice
                                         </p>
                                     </div>
                                 </div>
-                                <ChevronRight className="h-5 w-5 text-zinc-600 transition-transform group-hover:translate-x-1" />
+                                <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
                             </CardContent>
                         </Card>
                     </Link>
 
                     <Link href="/savings">
-                        <Card className="group cursor-pointer border-zinc-800 bg-zinc-900/50 transition-all hover:border-emerald-500/50">
+                        <Card className="group cursor-pointer border-border bg-card transition-all hover:bg-muted/50 shadow-sm">
                             <CardContent className="flex items-center justify-between p-5">
                                 <div className="flex items-center gap-3">
-                                    <div className="rounded-lg bg-purple-600/10 p-2">
-                                        <PiggyBank className="h-5 w-5 text-purple-500" />
+                                    <div className="rounded-lg bg-purple-500/10 p-2 border border-purple-500/20">
+                                        <PiggyBank className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                                     </div>
                                     <div>
-                                        <p className="font-medium text-white">My Savings</p>
-                                        <p className="text-xs text-zinc-500">
+                                        <p className="font-medium text-foreground">My Savings</p>
+                                        <p className="text-xs text-muted-foreground">
                                             Track your savings history
                                         </p>
                                     </div>
                                 </div>
-                                <ChevronRight className="h-5 w-5 text-zinc-600 transition-transform group-hover:translate-x-1" />
+                                <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
                             </CardContent>
                         </Card>
                     </Link>

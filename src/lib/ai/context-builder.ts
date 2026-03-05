@@ -1,12 +1,16 @@
 /**
- * Context Builder — Constructs user context for AI conversations
- * Pulls from user profile, recent transactions, savings stats, and active offers
+ * Context Builder — Constructs RICH user + knowledge context for AI conversations
+ * 
+ * v2: Now integrates the Knowledge Engine to inject domain-specific data
+ * based on what the user is asking about. This transforms generic AI
+ * responses into expert-level, data-driven advice.
  * 
  * All queries are wrapped in try-catch so the AI still works
  * even if some tables haven't been created yet.
  */
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { analyzeQuery, buildKnowledgeContext } from "./query-analyzer";
 
 export interface UserContext {
     profile: {
@@ -26,12 +30,21 @@ export interface UserContext {
         streak: number;
     } | null;
     activeOfferCount: number;
+    recentTransactions: Array<{
+        merchant: string;
+        category: string;
+        amount: number;
+        paymentApp: string;
+        date: string;
+    }>;
+    missedSavings: number;
 }
 
 /**
- * Build a comprehensive context string for the AI about this user
+ * Build a comprehensive context string for the AI about this user.
+ * Now includes knowledge injection based on the user's query.
  */
-export async function buildUserContext(userId: string): Promise<string> {
+export async function buildUserContext(userId: string, userQuery?: string): Promise<string> {
     const context: UserContext = {
         profile: null,
         recentSpending: {
@@ -41,6 +54,8 @@ export async function buildUserContext(userId: string): Promise<string> {
         },
         savingsStats: null,
         activeOfferCount: 0,
+        recentTransactions: [],
+        missedSavings: 0,
     };
 
     try {
@@ -142,32 +157,82 @@ export async function buildUserContext(userId: string): Promise<string> {
         } catch {
             // Table may not exist yet
         }
+
+        // 5. Get recent transactions (for context-aware responses)
+        try {
+            const { data: recentTxns } = await supabase
+                .from("user_transactions")
+                .select("merchant_name, category, amount, payment_app, transaction_date, missed_saving")
+                .eq("user_id", userId)
+                .order("transaction_date", { ascending: false })
+                .limit(20);
+
+            if (recentTxns && recentTxns.length > 0) {
+                context.recentTransactions = recentTxns.map((t: { merchant_name: string; category: string; amount: number; payment_app: string; transaction_date: string }) => ({
+                    merchant: t.merchant_name || "Unknown",
+                    category: t.category || "other",
+                    amount: Number(t.amount),
+                    paymentApp: t.payment_app || "Unknown",
+                    date: t.transaction_date,
+                }));
+
+                // Calculate missed savings
+                context.missedSavings = recentTxns.reduce(
+                    (sum: number, t: { missed_saving?: number }) => sum + Number(t.missed_saving || 0),
+                    0
+                );
+            }
+        } catch {
+            // Table may not exist yet
+        }
     } catch {
         // Supabase not configured — return empty context
     }
 
-    return formatContextForLLM(context);
+    // Build the user context string
+    const userContextStr = formatContextForLLM(context);
+    
+    // If we have a query, analyze it and inject domain knowledge
+    let knowledgeContext = "";
+    if (userQuery) {
+        try {
+            const analysis = analyzeQuery(userQuery);
+            knowledgeContext = buildKnowledgeContext(analysis);
+        } catch (err) {
+            console.warn("[ContextBuilder] Knowledge injection failed:", err);
+        }
+    }
+
+    return knowledgeContext 
+        ? `${userContextStr}\n\n--- DOMAIN KNOWLEDGE (Use this data in your response) ---\n${knowledgeContext}`
+        : userContextStr;
 }
 
 function formatContextForLLM(ctx: UserContext): string {
     const parts: string[] = [];
+    parts.push("--- USER PROFILE ---");
 
     if (ctx.profile) {
         parts.push(
-            `User's payment apps: ${ctx.profile.preferredApps.length > 0 ? ctx.profile.preferredApps.join(", ") : "not set up yet"}`
+            `Payment apps: ${ctx.profile.preferredApps.length > 0 ? ctx.profile.preferredApps.join(", ") : "not set up yet"}`
         );
         if (ctx.profile.cards.length > 0) {
             const cardList = ctx.profile.cards
                 .map((c) => `${c.bank} ${c.name} (${c.type})`)
                 .join(", ");
-            parts.push(`User's cards: ${cardList}`);
+            parts.push(`Cards: ${cardList}`);
+        } else {
+            parts.push("Cards: None registered yet (good opportunity to recommend one!)");
         }
         if (ctx.profile.monthlyBudget) {
             parts.push(`Monthly budget: ₹${ctx.profile.monthlyBudget}`);
         }
-        parts.push(`Subscription: ${ctx.profile.isPro ? "Pro" : "Free"}`);
+        parts.push(`Subscription: ${ctx.profile.isPro ? "Pro (unlimited queries)" : "Free (3 queries/day)"}`);
+    } else {
+        parts.push("Profile: Not set up yet (suggest onboarding)");
     }
 
+    parts.push("\n--- SPENDING DATA ---");
     if (ctx.recentSpending.thisMonth > 0) {
         parts.push(
             `This month's spending: ₹${ctx.recentSpending.thisMonth.toFixed(0)}`
@@ -184,15 +249,35 @@ function formatContextForLLM(ctx: UserContext): string {
                 .join(", ");
             parts.push(`Most used payment apps: ${apps}`);
         }
+    } else {
+        parts.push("No spending data logged this month. Encourage user to start tracking transactions.");
     }
 
+    // Recent transactions for pattern recognition
+    if (ctx.recentTransactions.length > 0) {
+        parts.push("\nRecent transactions (latest 10):");
+        ctx.recentTransactions.slice(0, 10).forEach((t) => {
+            parts.push(`  - ₹${t.amount} at ${t.merchant} (${t.category}) via ${t.paymentApp}`);
+        });
+    }
+
+    // Missed savings — this is GOLD for the AI to highlight
+    if (ctx.missedSavings > 0) {
+        parts.push(`\nMISSED SAVINGS THIS MONTH: ₹${ctx.missedSavings.toFixed(0)} (use this to motivate the user!)`);
+    }
+
+    parts.push("\n--- SAVINGS DATA ---");
     if (ctx.savingsStats) {
         parts.push(
-            `Total saved via PayWise: ₹${ctx.savingsStats.totalSaved.toFixed(0)}, this month: ₹${ctx.savingsStats.savedThisMonth.toFixed(0)}, streak: ${ctx.savingsStats.streak} days`
+            `Total saved via PayWise: ₹${ctx.savingsStats.totalSaved.toFixed(0)}`
         );
+        parts.push(`Saved this month: ₹${ctx.savingsStats.savedThisMonth.toFixed(0)}`);
+        parts.push(`Savings streak: ${ctx.savingsStats.streak} days`);
+    } else {
+        parts.push("No savings tracked yet. Encourage using 'I Used This' on offers page.");
     }
 
-    parts.push(`Active offers on platform: ${ctx.activeOfferCount}`);
+    parts.push(`\nActive offers on platform: ${ctx.activeOfferCount}`);
 
     return parts.join("\n");
 }

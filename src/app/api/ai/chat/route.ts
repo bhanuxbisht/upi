@@ -16,7 +16,7 @@ const rateLimiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 });
 
 const chatSchema = z.object({
     message: z.string().min(1, "Message is required").max(2000, "Message too long"),
-    conversationId: z.string().uuid().optional(),
+    conversationId: z.string().uuid().optional().nullable(),
 });
 
 export async function POST(request: NextRequest) {
@@ -61,13 +61,16 @@ export async function POST(request: NextRequest) {
         const parsed = chatSchema.safeParse(body);
 
         if (!parsed.success) {
+            console.error("[AI Chat] Validation failed:", parsed.error.flatten());
             return NextResponse.json(
                 { error: "Invalid input", details: parsed.error.flatten() },
                 { status: 400 }
             );
         }
 
-        const { message, conversationId } = parsed.data;
+        const { message, conversationId: rawConversationId } = parsed.data;
+        // Normalize null/undefined to undefined
+        const conversationId = rawConversationId || undefined;
 
         // Load conversation history if continuing
         let history: ChatMessage[] = [];
@@ -86,61 +89,77 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Build user context
-        const userContext = await buildUserContext(user.id);
+        // Build user context (resilient — returns empty string on failure)
+        // Now includes KNOWLEDGE INJECTION based on the user's query
+        let userContext = "";
+        try {
+            userContext = await buildUserContext(user.id, message);
+        } catch (ctxError) {
+            console.warn("[AI Chat] Context build failed, continuing without context:", ctxError);
+        }
 
         // Get AI response
         const aiResponse = await chatWithPayWise(message, history, userContext);
 
-        // Save conversation
-        const now = new Date().toISOString();
-        const newHistory: ChatMessage[] = [
-            ...history,
-            { role: "user", content: message, timestamp: now },
-            { role: "model", content: aiResponse.response, timestamp: now },
-        ];
+        // Save conversation (resilient — don't block AI response)
+        try {
+            const now = new Date().toISOString();
+            const newHistory: ChatMessage[] = [
+                ...history,
+                { role: "user", content: message, timestamp: now },
+                { role: "model", content: aiResponse.response, timestamp: now },
+            ];
 
-        if (activeConversationId) {
-            // Update existing conversation
-            await supabase
-                .from("ai_conversations")
-                .update({
-                    messages: newHistory,
-                    updated_at: now,
-                    total_tokens_used: aiResponse.tokensUsed,
-                })
-                .eq("id", activeConversationId)
-                .eq("user_id", user.id);
-        } else {
-            // Create new conversation
-            const title =
-                message.length > 50 ? message.slice(0, 50) + "..." : message;
+            if (activeConversationId) {
+                await supabase
+                    .from("ai_conversations")
+                    .update({
+                        messages: newHistory,
+                        updated_at: now,
+                        total_tokens_used: aiResponse.tokensUsed,
+                    })
+                    .eq("id", activeConversationId)
+                    .eq("user_id", user.id);
+            } else {
+                const title =
+                    message.length > 50 ? message.slice(0, 50) + "..." : message;
 
-            const { data: newConv } = await supabase
-                .from("ai_conversations")
-                .insert({
-                    user_id: user.id,
-                    title,
-                    messages: newHistory,
-                    total_tokens_used: aiResponse.tokensUsed,
-                })
-                .select("id")
-                .single();
+                const { data: newConv } = await supabase
+                    .from("ai_conversations")
+                    .insert({
+                        user_id: user.id,
+                        title,
+                        messages: newHistory,
+                        total_tokens_used: aiResponse.tokensUsed,
+                    })
+                    .select("id")
+                    .single();
 
-            activeConversationId = newConv?.id;
+                activeConversationId = newConv?.id;
+            }
+        } catch (saveError) {
+            console.warn("[AI Chat] Failed to save conversation:", saveError);
         }
 
-        // Track usage
-        await incrementAIUsage(user.id, aiResponse.tokensUsed);
+        // Track usage (resilient)
+        try {
+            await incrementAIUsage(user.id, aiResponse.tokensUsed);
+        } catch (usageError) {
+            console.warn("[AI Chat] Failed to increment usage:", usageError);
+        }
 
-        // Audit log
-        await logAudit({
-            userId: user.id,
-            action: "ai_query",
-            resourceType: "conversation",
-            resourceId: activeConversationId,
-            metadata: { messageLength: message.length, tokensUsed: aiResponse.tokensUsed },
-        });
+        // Audit log (resilient)
+        try {
+            await logAudit({
+                userId: user.id,
+                action: "ai_query",
+                resourceType: "conversation",
+                resourceId: activeConversationId,
+                metadata: { messageLength: message.length, tokensUsed: aiResponse.tokensUsed },
+            });
+        } catch (auditError) {
+            console.warn("[AI Chat] Audit log failed:", auditError);
+        }
 
         return NextResponse.json({
             response: aiResponse.response,

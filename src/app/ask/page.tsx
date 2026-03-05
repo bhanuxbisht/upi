@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, Sparkles, Loader2, MessageCircle, Zap, CreditCard, PiggyBank, RotateCcw } from "lucide-react";
+import { Send, Bot, User, Loader2, RotateCcw, Zap, CreditCard, PiggyBank, MessageCircle, TrendingDown, Receipt, ShieldCheck, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -17,26 +17,66 @@ interface UsageInfo {
     remaining: number;
 }
 
+interface Insight {
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    savingsAmount: number;
+    action: string;
+    actionLink?: string;
+    urgency: string;
+    icon: string;
+}
+
 const QUICK_ACTIONS = [
     {
         icon: Zap,
         label: "Best way to pay at Swiggy?",
-        message: "What's the best way to pay ₹500 at Swiggy right now?",
+        message: "What's the best way to pay ₹500 at Swiggy right now? Show me exact savings with each option.",
+        color: "text-orange-400",
     },
     {
         icon: CreditCard,
-        label: "Best credit card for food",
-        message: "Which credit card gives the best cashback for food delivery?",
+        label: "Best credit card for me",
+        message: "Based on my spending patterns, which credit card would save me the most money? Compare the top 3 options with exact annual savings.",
+        color: "text-blue-400",
     },
     {
         icon: PiggyBank,
-        label: "How much did I save?",
-        message: "How much have I saved this month using PayWise?",
+        label: "How to save ₹5000/month",
+        message: "Give me a specific weekly routine to save ₹5000/month on my digital payments. Include exact apps and cards to use.",
+        color: "text-green-400",
+    },
+    {
+        icon: TrendingDown,
+        label: "Analyze my spending",
+        message: "Analyze my spending patterns. How much am I leaving on the table? What are my biggest missed savings? Give me exact ₹ amounts.",
+        color: "text-red-400",
+    },
+    {
+        icon: Receipt,
+        label: "Stack offers for Amazon",
+        message: "How do I stack multiple discounts for an Amazon purchase? Show me the exact step-by-step with card + coupon + cashback combo.",
+        color: "text-yellow-400",
+    },
+    {
+        icon: ShieldCheck,
+        label: "Optimize my bills",
+        message: "Which app should I use for each monthly bill (electricity, mobile, broadband, credit card) to maximize cashback? Give me a bill-by-bill plan.",
+        color: "text-purple-400",
+    },
+    {
+        icon: Target,
+        label: "Rent via credit card",
+        message: "Is it profitable to pay rent via CRED using a credit card? Show me the math — which cards make it net positive after the 1.5% fee?",
+        color: "text-teal-400",
     },
     {
         icon: MessageCircle,
-        label: "Analyze my spending",
-        message: "Analyze my spending patterns and suggest ways to save more.",
+        label: "Subscription audit",
+        message: "Help me audit my subscriptions. Which OTT platforms are already included in mobile plans? Where am I wasting money?",
+        color: "text-pink-400",
     },
 ];
 
@@ -47,6 +87,7 @@ export default function AskPage() {
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [usage, setUsage] = useState<UsageInfo | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [insights, setInsights] = useState<Insight[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -57,6 +98,22 @@ export default function AskPage() {
     useEffect(() => {
         scrollToBottom();
     }, [messages, scrollToBottom]);
+
+    // Fetch proactive insights on mount
+    useEffect(() => {
+        const fetchInsights = async () => {
+            try {
+                const res = await fetch("/api/ai/insights");
+                if (res.ok) {
+                    const data = await res.json();
+                    setInsights(data.insights?.slice(0, 3) || []);
+                }
+            } catch {
+                // Silently fail — insights are supplementary
+            }
+        };
+        fetchInsights();
+    }, []);
 
     const sendMessage = async (messageText: string) => {
         if (!messageText.trim() || isLoading) return;
@@ -78,17 +135,22 @@ export default function AskPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     message: messageText.trim(),
-                    conversationId,
+                    // Send undefined (omitted) instead of null to avoid Zod issues
+                    ...(conversationId ? { conversationId } : {}),
                 }),
             });
 
             const data = await res.json();
 
             if (!res.ok) {
-                if (data.upgrade) {
+                if (res.status === 401) {
+                    setError("Please log in to use the AI assistant.");
+                } else if (data.upgrade) {
                     setError(data.message);
+                } else if (res.status === 429) {
+                    setError(data.error || "You've reached the rate limit. Please wait a moment and try again.");
                 } else {
-                    setError(data.error || "Something went wrong");
+                    setError(data.error || "Something went wrong. Please try again.");
                 }
                 return;
             }
@@ -103,7 +165,7 @@ export default function AskPage() {
             setConversationId(data.conversationId);
             setUsage(data.usage);
         } catch {
-            setError("Failed to connect. Please try again.");
+            setError("Failed to connect to PayWise AI. Please check your connection and try again.");
         } finally {
             setIsLoading(false);
             inputRef.current?.focus();
@@ -125,18 +187,15 @@ export default function AskPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950">
+        <div className="min-h-screen bg-background text-foreground flex flex-col pt-24 md:pt-28">
             {/* Header */}
-            <div className="sticky top-16 z-30 border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-xl">
-                <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+            <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm">
+                <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-lg shadow-emerald-500/20">
-                            <Sparkles className="h-5 w-5 text-white" />
-                        </div>
                         <div>
-                            <h1 className="text-lg font-bold text-white">Ask PayWise AI</h1>
-                            <p className="text-xs text-zinc-400">
-                                Your personal payment assistant
+                            <h1 className="text-lg font-medium text-foreground tracking-tight">PayWise AI</h1>
+                            <p className="text-xs text-muted-foreground">
+                                Trained on 14 credit cards, 6 UPI apps & 100+ offers
                             </p>
                         </div>
                     </div>
@@ -162,62 +221,109 @@ export default function AskPage() {
             </div>
 
             {/* Chat Area */}
-            <div className="mx-auto max-w-3xl px-4 pb-40 pt-6">
+            <div className="mx-auto max-w-3xl px-4 pb-40 pt-8 flex-1 w-full">
                 {messages.length === 0 ? (
-                    /* Empty State — Quick Actions */
-                    <div className="flex min-h-[60vh] flex-col items-center justify-center">
-                        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-2xl shadow-emerald-500/30">
-                            <Bot className="h-8 w-8 text-white" />
+                    /* Empty State — Quick Actions + Insights */
+                    <div className="flex flex-col items-center justify-center pt-6">
+                        <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-emerald-500/20">
+                            <Bot className="h-7 w-7 text-emerald-400" />
                         </div>
-                        <h2 className="mb-2 text-2xl font-bold text-white">
-                            Hi! I&apos;m PayWise AI 👋
+                        <h2 className="mb-1 text-2xl font-semibold tracking-tight text-foreground">
+                            PayWise AI
                         </h2>
-                        <p className="mb-8 text-center text-zinc-400">
-                            I help you save money on every digital payment.
-                            <br />
-                            Ask me anything about offers, payments, or savings!
+                        <p className="mb-1 text-center text-sm text-muted-foreground max-w-md">
+                            Your personal payment optimization expert. I know every credit card reward, UPI cashback, and offer stacking trick in India.
+                        </p>
+                        <p className="mb-8 text-center text-xs text-emerald-500/80">
+                            Average user saves ₹2,000-5,000/month
                         </p>
 
-                        <div className="grid w-full max-w-lg grid-cols-1 gap-3 sm:grid-cols-2">
-                            {QUICK_ACTIONS.map((action) => (
-                                <button
-                                    key={action.label}
-                                    onClick={() => sendMessage(action.message)}
-                                    className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-emerald-500/5"
-                                >
-                                    <action.icon className="h-5 w-5 shrink-0 text-emerald-500 transition-transform group-hover:scale-110" />
-                                    <span className="text-sm text-zinc-300 group-hover:text-white">
-                                        {action.label}
-                                    </span>
-                                </button>
-                            ))}
+                        {/* Proactive Insights Feed */}
+                        {insights.length > 0 && (
+                            <div className="w-full max-w-lg mb-8">
+                                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <Zap className="h-3 w-3 text-yellow-500" />
+                                    Insights for you
+                                </h3>
+                                <div className="space-y-2">
+                                    {insights.map((insight) => (
+                                        <button
+                                            key={insight.id}
+                                            onClick={() => sendMessage(insight.action)}
+                                            className="group w-full flex items-start gap-3 rounded-xl border border-border bg-card/50 p-3.5 text-left transition-all hover:bg-muted/50 hover:border-emerald-500/30"
+                                        >
+                                            <span className="text-lg mt-0.5">{insight.icon}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium text-foreground truncate">
+                                                        {insight.title}
+                                                    </span>
+                                                    {insight.savingsAmount > 0 && (
+                                                        <span className="shrink-0 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                                            Save ₹{insight.savingsAmount}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                                    {insight.description}
+                                                </p>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Quick Actions Grid */}
+                        <div className="w-full max-w-lg">
+                            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                Try asking
+                            </h3>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                {QUICK_ACTIONS.map((action) => (
+                                    <button
+                                        key={action.label}
+                                        onClick={() => sendMessage(action.message)}
+                                        className="group flex items-center gap-3 rounded-xl border border-border bg-card/50 p-3.5 text-left transition-all hover:bg-muted/50 hover:shadow-sm hover:border-foreground/20"
+                                    >
+                                        <action.icon className={`h-4.5 w-4.5 shrink-0 ${action.color} transition-transform group-hover:scale-110`} />
+                                        <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                                            {action.label}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 ) : (
                     /* Messages */
-                    <div className="space-y-6">
+                    <div className="space-y-8">
                         {messages.map((msg, i) => (
                             <div
                                 key={i}
-                                className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                                className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
                             >
                                 {msg.role === "assistant" && (
-                                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700">
-                                        <Bot className="h-4 w-4 text-white" />
+                                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted border border-border">
+                                        <Bot className="h-4 w-4 text-foreground" />
+                                    </div>
+                                )}
+                                {msg.role === "user" && (
+                                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                                        <User className="h-4 w-4" />
                                     </div>
                                 )}
                                 <div
-                                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === "user"
-                                            ? "bg-emerald-600 text-white"
-                                            : "border border-zinc-800 bg-zinc-900 text-zinc-200"
+                                    className={`max-w-[85%] rounded-2xl px-5 py-4 ${msg.role === "user"
+                                        ? "bg-foreground text-background"
+                                        : "bg-muted/50 border border-border text-foreground"
                                         }`}
                                 >
                                     <div className="whitespace-pre-wrap text-sm leading-relaxed">
                                         {msg.content}
                                     </div>
                                     <div
-                                        className={`mt-1 text-[10px] ${msg.role === "user" ? "text-emerald-200" : "text-zinc-600"
-                                            }`}
+                                        className={`mt-2 text-xs opacity-50 text-right`}
                                     >
                                         {new Date(msg.timestamp).toLocaleTimeString("en-IN", {
                                             hour: "2-digit",
@@ -225,21 +331,16 @@ export default function AskPage() {
                                         })}
                                     </div>
                                 </div>
-                                {msg.role === "user" && (
-                                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-700">
-                                        <User className="h-4 w-4 text-white" />
-                                    </div>
-                                )}
                             </div>
                         ))}
 
                         {isLoading && (
-                            <div className="flex gap-3">
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700">
-                                    <Bot className="h-4 w-4 text-white" />
+                            <div className="flex gap-4">
+                                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted border border-border">
+                                    <Bot className="h-4 w-4 text-foreground" />
                                 </div>
-                                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-                                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                                <div className="rounded-2xl border border-border bg-muted/50 px-5 py-4">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         Thinking...
                                     </div>
@@ -267,7 +368,7 @@ export default function AskPage() {
             </div>
 
             {/* Input Area — Fixed Bottom */}
-            <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800/50 bg-zinc-950/90 backdrop-blur-xl">
+            <div className="fixed bottom-0 left-0 right-0 border-t border-border/50 bg-background/80 backdrop-blur-xl">
                 <div className="mx-auto max-w-3xl px-4 py-4">
                     <div className="flex items-end gap-3">
                         <div className="relative flex-1">
@@ -276,12 +377,12 @@ export default function AskPage() {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Ask about offers, payments, or savings..."
+                                placeholder="Ask anything — 'Best card for Swiggy?', 'How to stack Amazon offers?'..."
                                 rows={1}
-                                className="w-full resize-none rounded-xl border border-zinc-700 bg-zinc-800/50 px-4 py-3 pr-12 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                                className="w-full resize-none rounded-xl border border-border bg-card px-4 py-3.5 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/10 transition-colors"
                                 style={{
                                     maxHeight: "120px",
-                                    minHeight: "44px",
+                                    minHeight: "48px",
                                 }}
                                 disabled={isLoading}
                             />
@@ -290,7 +391,8 @@ export default function AskPage() {
                             onClick={() => sendMessage(input)}
                             disabled={!input.trim() || isLoading}
                             size="icon"
-                            className="h-11 w-11 shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30"
+                            variant="secondary"
+                            className="h-12 w-12 shrink-0 rounded-xl bg-foreground text-background hover:bg-foreground/90 disabled:opacity-30 disabled:hover:bg-foreground"
                         >
                             <Send className="h-4 w-4" />
                         </Button>
