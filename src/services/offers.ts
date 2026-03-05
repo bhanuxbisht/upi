@@ -23,10 +23,20 @@ export async function getOffers(
     .range(offset, offset + limit - 1);
 
   if (filters.merchant) {
-    query = query.eq("merchant.slug", filters.merchant);
+    // Supabase PostgREST can't filter on embedded tables with .eq()
+    // Instead, look up the merchant ID first and filter by FK
+    const { data: merchant } = await supabase
+      .from("merchants")
+      .select("id")
+      .eq("slug", filters.merchant)
+      .single();
+
+    if (merchant) {
+      query = query.eq("merchant_id", merchant.id);
+    }
   }
   if (filters.category) {
-    // Category filter comes as a slug string — resolve to UUID first
+    // Category filter — resolve slug to ID, then find merchants in that category
     const { data: cat } = await supabase
       .from("categories")
       .select("id")
@@ -34,17 +44,34 @@ export async function getOffers(
       .single();
 
     if (cat) {
-      query = query.eq("merchant.category_id", cat.id);
+      const { data: merchantsInCat } = await supabase
+        .from("merchants")
+        .select("id")
+        .eq("category_id", cat.id);
+
+      if (merchantsInCat && merchantsInCat.length > 0) {
+        query = query.in("merchant_id", merchantsInCat.map(m => m.id));
+      }
     }
   }
   if (filters.payment_app) {
-    query = query.eq("payment_app.slug", filters.payment_app);
+    const { data: payApp } = await supabase
+      .from("payment_apps")
+      .select("id")
+      .eq("slug", filters.payment_app)
+      .single();
+
+    if (payApp) {
+      query = query.eq("payment_app_id", payApp.id);
+    }
   }
   if (filters.type) {
     query = query.eq("type", filters.type);
   }
   if (filters.search) {
-    query = query.ilike("title", `%${filters.search}%`);
+    // Escape SQL LIKE wildcards in user input to prevent pattern injection
+    const escapedSearch = filters.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    query = query.ilike("title", `%${escapedSearch}%`);
   }
 
   const { data, error, count } = await query;
@@ -99,14 +126,27 @@ export async function getOffersByMerchantAndAmount(
 ): Promise<OfferWithRelations[]> {
   const supabase = await getSupabaseServerClient();
 
-  const { data, error } = await supabase
+  // First find the merchant by name
+  const { data: merchants } = await supabase
+    .from("merchants")
+    .select("id")
+    .ilike("name", `%${merchantName}%`);
+
+  const merchantIds = merchants?.map(m => m.id) || [];
+
+  let query = supabase
     .from("offers")
     .select(`*, merchant:merchants(*), payment_app:payment_apps(*)`)
     .eq("status", "active")
     .gte("valid_to", new Date().toISOString())
-    .ilike("merchant.name", `%${merchantName}%`)
     .or(`min_transaction.is.null,min_transaction.lte.${amount}`)
     .order("cashback_amount", { ascending: false });
+
+  if (merchantIds.length > 0) {
+    query = query.in("merchant_id", merchantIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch recommendations: ${error.message}`);

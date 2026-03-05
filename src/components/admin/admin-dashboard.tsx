@@ -15,7 +15,7 @@ import {
     StrategyTable,
 } from "./knowledge";
 import { toast } from "sonner";
-import { Database } from "lucide-react";
+import { Database, Sparkles } from "lucide-react";
 
 interface AdminDashboardProps {
     merchants: { id: string; name: string; slug: string }[];
@@ -25,6 +25,7 @@ interface AdminDashboardProps {
 export function AdminDashboard({ merchants, paymentApps }: AdminDashboardProps) {
     const [refreshKey, setRefreshKey] = useState(0);
     const [seeding, setSeeding] = useState(false);
+    const [embedding, setEmbedding] = useState(false);
 
     function triggerRefresh() {
         setRefreshKey((k) => k + 1);
@@ -49,6 +50,28 @@ export function AdminDashboard({ merchants, paymentApps }: AdminDashboardProps) 
             toast.error("Failed to seed knowledge data");
         } finally {
             setSeeding(false);
+        }
+    }
+
+    async function generateEmbeddings() {
+        if (!confirm("This will generate AI embeddings for all knowledge items using Hugging Face (free). This may take 30-60 seconds. Continue?")) return;
+        setEmbedding(true);
+        try {
+            const res = await fetch("/api/admin/knowledge/embeddings", { method: "POST" });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(`Embeddings generated: ${data.embedded.creditCards} cards, ${data.embedded.upiApps} UPI apps, ${data.embedded.strategies} strategies`);
+                if (data.errors?.length) {
+                    toast.warning(`${data.errors.length} items had errors — check console`);
+                    console.warn("Embedding errors:", data.errors);
+                }
+            } else {
+                toast.error(data.error || "Embedding generation failed");
+            }
+        } catch {
+            toast.error("Failed to generate embeddings");
+        } finally {
+            setEmbedding(false);
         }
     }
 
@@ -82,12 +105,18 @@ export function AdminDashboard({ merchants, paymentApps }: AdminDashboardProps) 
 
             {/* ---- Knowledge Management Section ---- */}
             <TabsContent value="credit-cards">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
                     <h2 className="text-lg font-semibold">Credit Card Knowledge Base</h2>
-                    <Button variant="outline" size="sm" onClick={seedKnowledgeData} disabled={seeding}>
-                        <Database className="mr-1 h-4 w-4" />
-                        {seeding ? "Seeding..." : "Seed All Data from Code"}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={generateEmbeddings} disabled={embedding}>
+                            <Sparkles className="mr-1 h-4 w-4" />
+                            {embedding ? "Generating..." : "Generate Embeddings"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={seedKnowledgeData} disabled={seeding}>
+                            <Database className="mr-1 h-4 w-4" />
+                            {seeding ? "Seeding..." : "Seed All Data from Code"}
+                        </Button>
+                    </div>
                 </div>
                 <div className="space-y-6">
                     <CreditCardForm onSuccess={triggerRefresh} />
@@ -96,12 +125,18 @@ export function AdminDashboard({ merchants, paymentApps }: AdminDashboardProps) 
             </TabsContent>
 
             <TabsContent value="upi-apps">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
                     <h2 className="text-lg font-semibold">UPI App Knowledge Base</h2>
-                    <Button variant="outline" size="sm" onClick={seedKnowledgeData} disabled={seeding}>
-                        <Database className="mr-1 h-4 w-4" />
-                        {seeding ? "Seeding..." : "Seed All Data from Code"}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={generateEmbeddings} disabled={embedding}>
+                            <Sparkles className="mr-1 h-4 w-4" />
+                            {embedding ? "Generating..." : "Generate Embeddings"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={seedKnowledgeData} disabled={seeding}>
+                            <Database className="mr-1 h-4 w-4" />
+                            {seeding ? "Seeding..." : "Seed All Data from Code"}
+                        </Button>
+                    </div>
                 </div>
                 <div className="space-y-6">
                     <UpiAppForm onSuccess={triggerRefresh} />
@@ -110,12 +145,18 @@ export function AdminDashboard({ merchants, paymentApps }: AdminDashboardProps) 
             </TabsContent>
 
             <TabsContent value="strategies">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
                     <h2 className="text-lg font-semibold">Payment Strategy Knowledge Base</h2>
-                    <Button variant="outline" size="sm" onClick={seedKnowledgeData} disabled={seeding}>
-                        <Database className="mr-1 h-4 w-4" />
-                        {seeding ? "Seeding..." : "Seed All Data from Code"}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={generateEmbeddings} disabled={embedding}>
+                            <Sparkles className="mr-1 h-4 w-4" />
+                            {embedding ? "Generating..." : "Generate Embeddings"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={seedKnowledgeData} disabled={seeding}>
+                            <Database className="mr-1 h-4 w-4" />
+                            {seeding ? "Seeding..." : "Seed All Data from Code"}
+                        </Button>
+                    </div>
                 </div>
                 <div className="space-y-6">
                     <StrategyForm onSuccess={triggerRefresh} />

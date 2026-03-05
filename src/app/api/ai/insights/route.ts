@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
                     if (betterOptions.length > 0) {
                         const bestOption = betterOptions[0];
-                        const currentSavings = Number(txn.cashback_earned || 0);
+                        const currentSavings = Number(txn.cashback_received || 0);
 
                         if (bestOption.savings > currentSavings + 5) {
                             insights.push({

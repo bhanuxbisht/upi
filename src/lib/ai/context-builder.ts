@@ -11,7 +11,11 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { analyzeQuery, buildKnowledgeContext } from "./query-analyzer";
-import { buildDatabaseKnowledgeContext } from "./knowledge-service";
+import { buildDatabaseKnowledgeContext, buildSmartKnowledgeContext } from "./knowledge-service";
+import { calculateBestPayment, calculateBestCard, calculateBestBillPayment, formatCalculationForLLM } from "./payment-calculator";
+import { CREDIT_CARDS } from "./knowledge/credit-cards";
+import { UPI_APPS } from "./knowledge/upi-apps";
+import { OFFER_STACKING_STRATEGIES } from "./knowledge/payment-strategies";
 
 export interface UserContext {
     profile: {
@@ -163,7 +167,7 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
         try {
             const { data: recentTxns } = await supabase
                 .from("user_transactions")
-                .select("merchant_name, category, amount, payment_app, transaction_date, missed_saving")
+                .select("merchant_name, category, amount, payment_app, transaction_date, could_have_saved")
                 .eq("user_id", userId)
                 .order("transaction_date", { ascending: false })
                 .limit(20);
@@ -179,7 +183,7 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
 
                 // Calculate missed savings
                 context.missedSavings = recentTxns.reduce(
-                    (sum: number, t: { missed_saving?: number }) => sum + Number(t.missed_saving || 0),
+                    (sum: number, t: { could_have_saved?: number }) => sum + Number(t.could_have_saved || 0),
                     0
                 );
             }
@@ -194,27 +198,115 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
     const userContextStr = formatContextForLLM(context);
     
     // If we have a query, analyze it and inject domain knowledge
-    // Phase 3: Try Supabase knowledge first, then fall back to TypeScript
+    // Phase 3 Build 3-4: Smart retrieval (hybrid search + offer injection)
+    // Fallback chain: Smart search → Intent-based DB → TypeScript
     let knowledgeContext = "";
+    let calculatedContext = "";
+    
     if (userQuery) {
         try {
             const analysis = analyzeQuery(userQuery);
             
-            // Try database knowledge first (Phase 3 — admin-editable data)
+            // ═══════════════════════════════════════════════════════
+            // LAYER 0: DETERMINISTIC CALCULATOR (accuracy-first)
+            // When we detect a payment query with merchant + amount,
+            // compute EXACT ₹ savings in code. The LLM cannot
+            // hallucinate these numbers — they come from pure math.
+            // ═══════════════════════════════════════════════════════
             try {
-                const dbKnowledge = await buildDatabaseKnowledgeContext(
-                    analysis.intent,
-                    analysis.categories,
-                    analysis.merchants
-                );
-                if (dbKnowledge && !dbKnowledge.includes("unavailable")) {
-                    knowledgeContext = `[DETECTED INTENT: ${analysis.intent} (confidence: ${(analysis.confidence * 100).toFixed(0)}%)]\n\n${dbKnowledge}`;
+                if (
+                    analysis.amount &&
+                    analysis.merchants.length > 0 &&
+                    (analysis.intent === "payment_recommendation" || analysis.intent === "merchant_specific")
+                ) {
+                    // Calculate exact savings for this merchant + amount
+                    const calcResult = calculateBestPayment(
+                        analysis.merchants[0],
+                        analysis.amount,
+                        CREDIT_CARDS,
+                        UPI_APPS,
+                        OFFER_STACKING_STRATEGIES
+                    );
+                    calculatedContext = formatCalculationForLLM(calcResult);
+                } else if (
+                    analysis.intent === "bill_optimization" &&
+                    analysis.amount &&
+                    analysis.categories.length > 0
+                ) {
+                    const billResult = calculateBestBillPayment(
+                        analysis.categories[0],
+                        analysis.amount,
+                        CREDIT_CARDS,
+                        UPI_APPS
+                    );
+                    calculatedContext = [
+                        `[CALCULATED BILL OPTIMIZATION — These numbers are VERIFIED]`,
+                        `Best app: ${billResult.app}`,
+                        `Best card: ${billResult.card || "N/A"}`,
+                        `Total savings: ₹${billResult.savings.toFixed(0)}`,
+                        `Breakdown: ${billResult.breakdown.join(" + ")}`,
+                        `[IMPORTANT: Use these exact numbers in your response.]`,
+                    ].join("\n");
+                } else if (
+                    analysis.intent === "card_recommendation" &&
+                    analysis.categories.length > 0
+                ) {
+                    // Build a spending profile from the detected categories
+                    const profile: Record<string, number> = {};
+                    for (const cat of analysis.categories) {
+                        profile[cat] = analysis.amount || 5000; // default ₹5000/month if no amount
+                    }
+                    const cardResults = calculateBestCard(profile, CREDIT_CARDS);
+                    const top3 = cardResults.slice(0, 3);
+                    calculatedContext = [
+                        `[CALCULATED CARD COMPARISON — These numbers are VERIFIED]`,
+                        ...top3.map((r, i) => [
+                            `${i + 1}. ${r.card.bank} ${r.card.name}`,
+                            `   Monthly savings: ₹${r.monthlySavings.toFixed(0)}`,
+                            `   Annual savings: ₹${r.annualSavings.toFixed(0)}`,
+                            `   Net benefit (after fee): ₹${r.netAnnualBenefit.toFixed(0)}`,
+                            `   Breakdown: ${r.breakdown.map(b => `${b.category}: ${b.rate}% = ₹${b.savings.toFixed(0)}/mo`).join(", ")}`,
+                        ].join("\n")),
+                        `[IMPORTANT: Present these cards with the exact ₹ numbers shown above.]`,
+                    ].join("\n");
                 }
-            } catch {
-                console.warn("[ContextBuilder] DB knowledge failed, falling back to TypeScript");
+            } catch (calcError) {
+                console.warn("[ContextBuilder] Calculator failed, continuing with knowledge fallback:", calcError);
             }
             
-            // Fallback to TypeScript-based knowledge if DB didn't return useful data
+            // LAYER 1: Smart retrieval (hybrid full-text + vector search + live offers)
+            try {
+                const smartKnowledge = await buildSmartKnowledgeContext(
+                    userQuery,
+                    analysis.intent,
+                    analysis.categories,
+                    analysis.merchants,
+                    analysis.paymentApps
+                );
+                if (smartKnowledge && !smartKnowledge.includes("unavailable")) {
+                    knowledgeContext = `[DETECTED INTENT: ${analysis.intent} (confidence: ${(analysis.confidence * 100).toFixed(0)}%)]\n\n${smartKnowledge}`;
+                }
+            } catch {
+                console.warn("[ContextBuilder] Smart retrieval failed, trying intent-based fallback");
+            }
+
+            // LAYER 2: Intent-based DB fetch (Phase 3 Build 1-2 — fetch all, filter by intent)
+            if (!knowledgeContext) {
+                try {
+                    const dbKnowledge = await buildDatabaseKnowledgeContext(
+                        analysis.intent,
+                        analysis.categories,
+                        analysis.merchants
+                    );
+                    if (dbKnowledge && !dbKnowledge.includes("unavailable")) {
+                        knowledgeContext = `[DETECTED INTENT: ${analysis.intent} (confidence: ${(analysis.confidence * 100).toFixed(0)}%)]\n\n${dbKnowledge}`;
+                    }
+                } catch {
+                    console.warn("[ContextBuilder] DB knowledge failed, falling back to TypeScript");
+                }
+            }
+            
+            // LAYER 3: TypeScript hardcoded fallback (always works, never breaks)
             if (!knowledgeContext) {
                 knowledgeContext = buildKnowledgeContext(analysis);
             }
@@ -223,9 +315,14 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
         }
     }
 
-    return knowledgeContext 
-        ? `${userContextStr}\n\n--- DOMAIN KNOWLEDGE (Use this data in your response) ---\n${knowledgeContext}`
-        : userContextStr;
+    // Combine all context layers — calculator results override knowledge
+    const allContext = [
+        userContextStr,
+        calculatedContext ? `\n--- CALCULATED RESULTS (Trust these numbers completely) ---\n${calculatedContext}` : "",
+        knowledgeContext ? `\n--- DOMAIN KNOWLEDGE (Use this data in your response) ---\n${knowledgeContext}` : "",
+    ].filter(Boolean).join("\n");
+
+    return allContext;
 }
 
 function formatContextForLLM(ctx: UserContext): string {

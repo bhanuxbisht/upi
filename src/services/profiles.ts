@@ -229,14 +229,13 @@ export async function deleteAllUserData(userId: string): Promise<void> {
     const supabase = await getSupabaseServerClient();
 
     // Delete in correct order (respect foreign key constraints)
-    await Promise.all([
-        supabase.from("ai_conversations").delete().eq("user_id", userId),
-        supabase.from("ai_usage").delete().eq("user_id", userId),
-        supabase.from("user_offer_matches").delete().eq("user_id", userId),
-        supabase.from("user_transactions").delete().eq("user_id", userId),
-        supabase.from("user_savings").delete().eq("user_id", userId),
-        supabase.from("user_savings_stats").delete().eq("user_id", userId),
-        supabase.from("consent_records").delete().eq("user_id", userId),
-        supabase.from("user_profiles").delete().eq("user_id", userId),
-    ]);
+    // Sequential to avoid FK violations
+    await supabase.from("ai_conversations").delete().eq("user_id", userId);
+    await supabase.from("ai_usage").delete().eq("user_id", userId);
+    await supabase.from("user_offer_matches").delete().eq("user_id", userId);
+    await supabase.from("user_transactions").delete().eq("user_id", userId);
+    await supabase.from("user_savings").delete().eq("user_id", userId);
+    await supabase.from("user_savings_stats").delete().eq("user_id", userId);
+    await supabase.from("consent_records").delete().eq("user_id", userId);
+    await supabase.from("user_profiles").delete().eq("user_id", userId);
 }

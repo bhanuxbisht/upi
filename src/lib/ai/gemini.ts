@@ -13,6 +13,7 @@
  */
 
 import { PAYWISE_SYSTEM_PROMPT } from "./prompts";
+import "server-only";
 
 // ============================================================
 // CURRENT PROVIDER: GROQ (Free MVP)
