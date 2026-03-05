@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
     title: "Admin Panel — PayWise",
-    description: "Manage offers, review community submissions, and add new deals.",
+    description: "Manage offers, knowledge base, and review community submissions.",
 };
 
 export default async function AdminPage() {
@@ -66,7 +66,7 @@ export default async function AdminPage() {
                         Admin Panel
                     </h1>
                     <p className="mt-2 text-muted-foreground">
-                        Add offers, manage existing ones, and review community submissions.
+                        Manage offers, knowledge base (credit cards, UPI apps, strategies), and review submissions.
                     </p>
                 </div>
                 <div className="hidden items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm text-emerald-700 sm:flex">

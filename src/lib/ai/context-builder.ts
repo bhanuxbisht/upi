@@ -11,6 +11,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { analyzeQuery, buildKnowledgeContext } from "./query-analyzer";
+import { buildDatabaseKnowledgeContext } from "./knowledge-service";
 
 export interface UserContext {
     profile: {
@@ -193,11 +194,30 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
     const userContextStr = formatContextForLLM(context);
     
     // If we have a query, analyze it and inject domain knowledge
+    // Phase 3: Try Supabase knowledge first, then fall back to TypeScript
     let knowledgeContext = "";
     if (userQuery) {
         try {
             const analysis = analyzeQuery(userQuery);
-            knowledgeContext = buildKnowledgeContext(analysis);
+            
+            // Try database knowledge first (Phase 3 — admin-editable data)
+            try {
+                const dbKnowledge = await buildDatabaseKnowledgeContext(
+                    analysis.intent,
+                    analysis.categories,
+                    analysis.merchants
+                );
+                if (dbKnowledge && !dbKnowledge.includes("unavailable")) {
+                    knowledgeContext = `[DETECTED INTENT: ${analysis.intent} (confidence: ${(analysis.confidence * 100).toFixed(0)}%)]\n\n${dbKnowledge}`;
+                }
+            } catch {
+                console.warn("[ContextBuilder] DB knowledge failed, falling back to TypeScript");
+            }
+            
+            // Fallback to TypeScript-based knowledge if DB didn't return useful data
+            if (!knowledgeContext) {
+                knowledgeContext = buildKnowledgeContext(analysis);
+            }
         } catch (err) {
             console.warn("[ContextBuilder] Knowledge injection failed:", err);
         }

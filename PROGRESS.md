@@ -1,16 +1,77 @@
 # PayWise AI — Development Progress
 
-> Last updated: **4 March 2026**
-> Status: **MVP Core + Savings Counter + PayWise AI Foundation (Phase 1) | Supabase Connected ✅**
+> Last updated: **5 March 2026**
+> Status: **MVP Core + Savings Counter + Knowledge Engine + AI Architecture Pivot | Supabase Connected ✅**
 
 ---
 
-## 🆕 PayWise AI — Phase 1 Foundation (March 4, 2026)
+## 🆕 Knowledge Engine & AI Architecture Pivot (March 5, 2026)
+
+### Critical Discovery
+A deep codebase audit revealed that PayWise's "AI" is actually a **prompt-engineering system, not a real AI assistant**. The LLM (Groq) does zero thinking — it reformats hardcoded TypeScript data. The query analyzer is regex-based (`q.includes("swiggy")`), knowledge is static code, and insights are if/else rules.
+
+**Decision:** Pivot from prompt-stuffing → RAG (Retrieval-Augmented Generation) architecture. See `CTO_PLAN.md` for the full technical plan.
+
+### What Was Built (March 5)
+
+#### Knowledge Engine (3 Modules)
+- [x] **Credit card knowledge** — `src/lib/ai/knowledge/credit-cards.ts` (572 lines)
+  - 14 Indian credit cards with full reward rates, fees, requirements
+  - `getBestCardsForCategory()`, `getBestCardForMerchant()`, `getCardRecommendation()`
+  - `affiliateLink` + `affiliatePayout` fields for future revenue
+- [x] **UPI app knowledge** — `src/lib/ai/knowledge/upi-apps.ts`
+  - 6 UPI apps with market share, strategies, linked card support
+  - `getBestUPIAppForCategory()`, `getOptimalAppStack()`
+- [x] **Payment strategies** — `src/lib/ai/knowledge/payment-strategies.ts`
+  - 7 offer stacking strategies, 4-week monthly routines
+  - Subscription optimization, tax payment tips
+  - `estimateMonthlySavings()`, `getRelevantStrategies()`
+- [x] **Barrel exports** — `src/lib/ai/knowledge/index.ts`
+
+#### Query Analyzer (654 lines)
+- [x] **Intent detection** — `src/lib/ai/query-analyzer.ts`
+  - 15 intent types: `payment_recommendation`, `card_recommendation`, `spending_analysis`, `offer_stacking`, `subscription_optimize`, `tax_savings`, `compare_apps`, `rent_payment`, `bill_optimization`, `monthly_routine`, `reward_maximization`, `merchant_specific`, `budget_advice`, `savings_check`, `general_advice`
+  - 35+ merchant patterns with category mapping
+  - 10 category keywords, entity extraction (merchants, amounts, apps, cards)
+  - `analyzeQuery()` returns structured intent + entities + confidence
+  - 15 specialized `buildKnowledgeContext()` dispatchers
+
+#### AI System Overhaul
+- [x] **Prompt rewrite** — `src/lib/ai/prompts.ts` (123 lines) — Domain-expert system prompt with `[VERIFIED DATA]` block, proactive insight prompt, categorization prompt
+- [x] **Context builder upgrade** — `src/lib/ai/context-builder.ts` (284 lines) — Now accepts `userQuery` param, injects domain knowledge via query analyzer as `--- DOMAIN KNOWLEDGE ---` section
+- [x] **Token limit increase** — `max_tokens: 1024 → 2048` in `src/lib/ai/gemini.ts`
+- [x] **Chat API update** — `/api/ai/chat` now passes user message to context builder for knowledge injection
+
+#### New API Endpoints
+- [x] **Transaction import** — `POST /api/transactions/import` — Parses bank SMS/statements with 80+ merchant patterns, 10 payment app patterns, 3 amount regex formats, returns categorized transactions + quick insight
+- [x] **Proactive insights** — `GET /api/ai/insights` — Generates 5 insight types (missed-saving, spending-alert, offer-alert, optimization-tip, milestone) sorted by urgency
+
+#### Ask Page UI Overhaul
+- [x] **8 domain-specific quick actions** (was 4 generic) — colored icons, detailed prompts for card comparison, offer stacking, rent optimization, etc.
+- [x] **Proactive insights feed** — Fetches from `/api/ai/insights` on mount, shows up to 3 insights
+- [x] **New hero state** — Bot icon with gradient, "Trained on 14 credit cards, 6 UPI apps & 100+ offers" tagline
+- [x] **`Insight` interface** added to types
+
+#### Documentation Overhaul
+- [x] **CEO_TASKS.md** — 7 data tasks for Bhanu (verified card data, live offers, AI testing, competitor testing, financier network, Razorpay setup, beta recruitment)
+- [x] **CTO_PLAN.md** — 7 technical builds explained in CEO-friendly language (admin panel, DB migration, vector search/RAG, onboarding, insights, Razorpay, affiliates)
+- [x] **VISION.md** — 12-section vision document (₹5,200 Cr target, 24-month roadmap, revenue model, competitive moats)
+
+### Known Limitations Identified
+- Knowledge is hardcoded in TypeScript — goes stale immediately
+- Query analyzer uses string matching (`q.includes()`), breaks on typos
+- Insights are rule-based if/else, not data-driven
+- No onboarding — all users get identical generic recommendations
+- **Solution:** Admin panel → DB migration → pgvector RAG → Onboarding (see CTO_PLAN.md)
+
+---
+
+## PayWise AI — Phase 1 Foundation (March 4, 2026)
 
 ### What Was Built
 
 #### AI Chat System ("Ask PayWise")
-- [x] **Google Gemini 2.0 Flash integration** — `src/lib/ai/gemini.ts`
+- [x] **Groq API integration** (Llama 3.3 70B Versatile) — `src/lib/ai/gemini.ts` — Free tier: 30 req/min, 14,400/day
 - [x] **System prompt engineering** — Carefully crafted to prevent hallucination, block sensitive data requests — `src/lib/ai/prompts.ts`
 - [x] **Context builder** — Builds user profile + spending history + savings context for AI — `src/lib/ai/context-builder.ts`
 - [x] **Chat API route** — `/api/ai/chat` with auth, rate limiting, conversation persistence, usage tracking
@@ -48,24 +109,28 @@
 #### Navigation Update
 - [x] Added "Dashboard" and "Ask AI" to main navigation
 
-### New Routes Added
+### Routes Added (March 4-5)
 | Route | Type | Description |
 |-------|------|-------------|
 | `/ask` | Dynamic | "Ask PayWise" AI chat interface (auth-gated) |
 | `/dashboard` | Dynamic | Personal finance dashboard (auth-gated) |
-| `/api/ai/chat` | POST | AI chat with Gemini, usage limits, conversation persistence |
+| `/api/ai/chat` | POST | AI chat with Groq (Llama 3.3 70B), usage limits, conversation persistence |
+| `/api/ai/insights` | GET | Proactive insights engine (5 types, urgency-sorted) |
 | `/api/transactions` | GET/POST | Transaction CRUD with filters |
+| `/api/transactions/import` | POST | SMS/bank statement parsing (80+ merchant patterns) |
 | `/api/profile` | GET/PATCH | User profile management |
 | `/api/analytics/spending` | GET | Spending analytics engine |
 | `/api/data/export` | GET | DPDP data export |
 | `/api/data/delete` | DELETE | DPDP right to erasure |
 
-### New Dependencies
-- `@google/generative-ai` — Google Gemini 2.0 Flash SDK
+### AI Provider Status
+- **Active:** Groq API (`llama-3.3-70b-versatile`) — env var `GROQ_API_KEY`
+- **Installed but inactive:** `@google/generative-ai` (Gemini code exists in `gemini.ts` but is commented out)
+- **Switch guide:** See `docs/AI_PROVIDER_SWITCH.md`
 
 ### Setup Required
-1. Run `npm install` to install new dependencies
-2. Add `GOOGLE_AI_API_KEY=your-key-here` to `.env.local`
+1. Run `npm install` to install dependencies
+2. Add `GROQ_API_KEY=your-key-here` to `.env.local`
 3. Run `supabase/migrations/003_paywise_ai.sql` in Supabase SQL Editor
 
 ---
@@ -279,61 +344,91 @@ So expired offers are **automatically excluded** from all API responses.
 
 ```
 paywise/
-├── .env.local                          # Supabase credentials ✅ CONFIGURED
-├── next.config.ts                      # Next.js config (turbopack root set)
-├── package.json                        # Dependencies
+├── .env.local                          ← Supabase + Groq credentials ✅ CONFIGURED
+├── next.config.ts                      ← Next.js config (turbopack root set)
+├── package.json                        ← Dependencies
+├── CEO_TASKS.md                        ← Bhanu's 7 action items (data, testing, revenue)
+├── CTO_PLAN.md                         ← Technical build plan (7 builds, RAG architecture)
+├── VISION.md                           ← 12-section company vision document
 ├── supabase/
-│   ├── schema.sql                      # Complete DB schema + seed data ✅ RUN
+│   ├── schema.sql                      ← Complete DB schema + seed data ✅ RUN
 │   └── migrations/
-│       └── 002_user_savings.sql        # User savings tracking ✅ RUN
+│       ├── 002_user_savings.sql        ← User savings tracking ✅ RUN
+│       └── 003_paywise_ai.sql          ← AI system tables (7 tables) ✅ RUN
 ├── src/
-│   ├── proxy.ts                        # Auth session refresh
+│   ├── proxy.ts                        ← Auth session refresh
 │   ├── app/
-│   │   ├── layout.tsx                  # Root layout (Navbar + Footer + Toaster)
-│   │   ├── page.tsx                    # Homepage
-│   │   ├── login/page.tsx              # Login page
-│   │   ├── signup/page.tsx             # Signup page
-│   │   ├── offers/page.tsx             # Offer dashboard
-│   │   ├── recommend/page.tsx          # "Best Way to Pay"
-│   │   ├── submit/page.tsx             # Submit an offer
-│   │   ├── savings/page.tsx            # My Savings dashboard
-│   │   ├── admin/page.tsx              # Admin panel
-│   │   ├── extension/page.tsx          # Chrome Extension coming soon
-│   │   ├── auth/callback/route.ts      # OAuth callback
+│   │   ├── layout.tsx                  ← Root layout (Navbar + Footer + Toaster)
+│   │   ├── page.tsx                    ← Homepage
+│   │   ├── login/page.tsx              ← Login page
+│   │   ├── signup/page.tsx             ← Signup page
+│   │   ├── offers/page.tsx             ← Offer dashboard
+│   │   ├── recommend/page.tsx          ← "Best Way to Pay"
+│   │   ├── submit/page.tsx             ← Submit an offer
+│   │   ├── savings/page.tsx            ← My Savings dashboard
+│   │   ├── ask/page.tsx                ← "Ask PayWise" AI chat (8 quick actions, insights)
+│   │   ├── dashboard/page.tsx          ← Personal finance dashboard
+│   │   ├── admin/page.tsx              ← Admin panel
+│   │   ├── extension/page.tsx          ← Chrome Extension coming soon
+│   │   ├── auth/callback/route.ts      ← OAuth callback
 │   │   └── api/
-│   │       ├── offers/route.ts         # GET offers
-│   │       ├── recommend/route.ts      # POST recommendations
-│   │       ├── submit/route.ts         # POST offer submission
-│   │       ├── waitlist/route.ts       # POST waitlist signup
+│   │       ├── offers/route.ts         ← GET offers
+│   │       ├── recommend/route.ts      ← POST recommendations
+│   │       ├── submit/route.ts         ← POST offer submission
+│   │       ├── waitlist/route.ts       ← POST waitlist signup
 │   │       ├── savings/
-│   │       │   ├── track/route.ts      # POST log a saving event
-│   │       │   └── stats/route.ts      # GET savings stats
+│   │       │   ├── track/route.ts      ← POST log a saving event
+│   │       │   └── stats/route.ts      ← GET savings stats
+│   │       ├── ai/
+│   │       │   ├── chat/route.ts       ← POST AI chat (Groq + knowledge injection)
+│   │       │   └── insights/route.ts   ← GET proactive insights (5 types)
+│   │       ├── transactions/
+│   │       │   ├── route.ts            ← GET/POST transactions
+│   │       │   └── import/route.ts     ← POST SMS/statement parser (80+ patterns)
+│   │       ├── analytics/spending/     ← GET spending analytics
+│   │       ├── profile/route.ts        ← GET/PATCH user profile
+│   │       ├── data/
+│   │       │   ├── export/route.ts     ← GET data export (DPDP)
+│   │       │   └── delete/route.ts     ← DELETE right to erasure (DPDP)
 │   │       └── admin/
-│   │           ├── offers/route.ts     # Admin: create/manage offers
-│   │           └── submissions/route.ts # Admin: review submissions
+│   │           ├── offers/route.ts     ← Admin: create/manage offers
+│   │           └── submissions/route.ts ← Admin: review submissions
 │   ├── components/
-│   │   ├── auth/                       # Login + signup forms
-│   │   ├── layout/                     # Navbar, footer, marquee
-│   │   ├── offers/                     # Offer card + filters
-│   │   ├── recommend/                  # Recommendation form
-│   │   ├── submit/                     # Submit offer form
-│   │   ├── savings/                    # Savings counter, tracker, history
-│   │   ├── admin/                      # Admin dashboard, offer table, submissions
-│   │   └── ui/                         # 14 shadcn/ui components
+│   │   ├── auth/                       ← Login + signup forms
+│   │   ├── layout/                     ← Navbar, footer, marquee
+│   │   ├── offers/                     ← Offer card + filters + promo copy button
+│   │   ├── recommend/                  ← Recommendation form
+│   │   ├── submit/                     ← Submit offer form
+│   │   ├── savings/                    ← Savings counter, tracker, history
+│   │   ├── admin/                      ← Admin dashboard, offer table, submissions
+│   │   └── ui/                         ← 14 shadcn/ui components
 │   ├── lib/
-│   │   ├── constants.ts                # App name, categories, payment apps, nav links
-│   │   ├── env.ts                      # Typed env var helpers
-│   │   ├── utils.ts                    # cn() utility
-│   │   ├── validations.ts             # All Zod schemas
-│   │   ├── rate-limit.ts              # In-memory rate limiter
-│   │   ├── admin-auth.ts              # verifyAdmin() helper
-│   │   └── supabase/                   # Browser, server, middleware, admin clients
+│   │   ├── constants.ts                ← App name, categories, payment apps, nav links
+│   │   ├── env.ts                      ← Typed env var helpers
+│   │   ├── utils.ts                    ← cn() utility
+│   │   ├── validations.ts             ← All Zod schemas
+│   │   ├── rate-limit.ts              ← In-memory rate limiter
+│   │   ├── admin-auth.ts              ← verifyAdmin() helper
+│   │   ├── ai/
+│   │   │   ├── gemini.ts              ← chatWithGroq(), chatWithPayWise(), quickAsk()
+│   │   │   ├── prompts.ts             ← Domain-expert system prompt
+│   │   │   ├── context-builder.ts     ← buildUserContext(userId, userQuery?)
+│   │   │   ├── query-analyzer.ts      ← analyzeQuery() — 15 intents
+│   │   │   └── knowledge/
+│   │   │       ├── credit-cards.ts    ← 14 cards with rewards, fees, affiliates
+│   │   │       ├── upi-apps.ts        ← 6 UPI apps with market share
+│   │   │       └── payment-strategies.ts ← 7 stacking strategies
+│   │   ├── security/audit.ts          ← Audit logging (DPDP compliance)
+│   │   └── supabase/                   ← Browser, server, middleware, admin clients
 │   ├── services/
-│   │   ├── offers.ts                   # Offer CRUD services
-│   │   └── lookups.ts                  # Categories, merchants, payment apps
+│   │   ├── offers.ts                   ← Offer CRUD services
+│   │   ├── lookups.ts                  ← Categories, merchants, payment apps
+│   │   ├── profiles.ts                ← User profile + pro status + AI usage
+│   │   └── transactions.ts            ← Transaction CRUD + analytics
 │   └── types/
-│       ├── database.ts                 # All DB types
-│       └── api.ts                      # API response types
+│       ├── database.ts                 ← All DB types
+│       ├── api.ts                      ← API response types
+│       └── index.ts                    ← Type barrel exports
 ```
 
 ---
@@ -341,98 +436,78 @@ paywise/
 ## 8. Build Status
 
 ```
-✅ npm run build — PASSES (0 errors, 0 warnings)
+✅ npm run build — PASSES (33 routes, 0 errors, 0 warnings)
 ✅ npm run dev   — All pages serve 200 OK
 ✅ TypeScript    — Strict mode, no errors
 ✅ Supabase      — Connected and operational
+✅ Groq API      — Connected (Llama 3.3 70B Versatile)
 ```
 
 ---
 
 ## 9. Remaining Work
 
+### 🔴 NEXT UP — AI Architecture Pivot (CTO builds, see CTO_PLAN.md)
+1. [ ] **Admin Panel for Knowledge Management** — Web UI to add/edit/delete cards, offers, strategies without code deploy
+2. [ ] **DB Migration** — Move hardcoded TypeScript knowledge → Supabase tables with `last_verified_date`
+3. [ ] **Vector Search (RAG)** — Supabase pgvector for semantic retrieval instead of regex matching
+4. [ ] **Smart Onboarding** — "What cards/apps do you use?" flow for personalized AI answers
+5. [ ] **Razorpay Integration** — Pro subscription (₹99/mo) when Bhanu shares API keys
+6. [ ] **Affiliate Link Tracking** — Revenue from card recommendations
+
+### 🔴 CEO TASKS (Bhanu does, see CEO_TASKS.md)
+1. [ ] Test AI with 10 specific questions, document failures
+2. [ ] Collect live offers from 5 apps (Swiggy, Zomato, Amazon, Flipkart, bill pay)
+3. [ ] Verify top 20 credit card details from bank websites
+4. [ ] Competitor testing (CRED, CashKaro, CardExpert, CouponDunia, BankBazaar)
+5. [ ] Set up Razorpay account + affiliate programs
+6. [ ] Recruit 50 beta users
+
+### ✅ Completed - Knowledge Engine & AI Overhaul (March 5, 2026)
+- [x] 3 knowledge modules (14 cards, 6 UPI apps, 7 stacking strategies)
+- [x] Query analyzer (15 intents, 35+ merchant patterns, entity extraction)
+- [x] Domain-expert prompt rewrite
+- [x] Context builder with knowledge injection
+- [x] Transaction import API (80+ merchant patterns)
+- [x] Proactive insights API (5 types)
+- [x] Ask page UI overhaul (8 quick actions, insights feed)
+- [x] CEO_TASKS.md + CTO_PLAN.md + VISION.md created
+- [x] Token limit: 1024 → 2048
+
+### ✅ Completed - PayWise AI Foundation (March 4, 2026)
+- [x] Groq API integration (Llama 3.3 70B Versatile)
+- [x] System prompt engineering + safety settings
+- [x] Context builder (profile + spending + savings)
+- [x] Chat API with usage limits + conversation persistence
+- [x] Dashboard with spending analytics
+- [x] 7 new DB tables (profiles, transactions, conversations, offer matches, audit, consent, usage)
+- [x] DPDP compliance (data export + deletion APIs)
+
 ### ✅ Completed - Supabase Setup (Feb 19, 2026)
-- [x] Set real `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
-- [x] Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`
-- [x] Run `supabase/schema.sql` in Supabase SQL Editor
-- [x] Run `supabase/migrations/002_user_savings.sql` in Supabase SQL Editor
-- [x] Enable Google OAuth provider in Supabase Auth settings
+- [x] Real Supabase credentials configured
+- [x] All SQL schemas and migrations run
+- [x] Google OAuth enabled
 
 ### ✅ Completed - Tier 1 Features (Feb 16, 2026)
-- [x] **💰 Savings Counter System** (P0 - Critical for retention)
-  - [x] Database schema with `user_savings` and `user_savings_stats` tables
-  - [x] Auto-updating triggers for real-time stats
-  - [x] API routes: `/api/savings/track` and `/api/savings/stats`
-  - [x] UI components: SavingsCounter, TrackSavingButton, SavingsHistory
-  - [x] Full savings dashboard page at `/savings`
-  - [x] "I Used This" button integrated into offer cards
-  - [x] Navigation menu updated with "My Savings" link
+- [x] Savings Counter System (DB + API + UI + dashboard)
+- [x] Admin Panel (dashboard + offer management + submission review)
+- [x] Security Hardening (rate limiting + Zod + RLS + IDOR + RBAC)
 
-### ✅ Completed - Admin Panel (Feb 16, 2026)
-- [x] Admin dashboard with tabs
-- [x] Add offer form
-- [x] Offer table management
-- [x] Submission review system
-- [x] Role-gated access (email whitelist)
-
-### ✅ Completed - Security Hardening (Feb 16, 2026)
-- [x] Rate limiting on all 6 API routes
-- [x] Input validation (Zod + SQL CHECK constraints)
-- [x] RLS enabled on all tables
-- [x] IDOR protection
-- [x] Admin RBAC
-
-### 🔲 Testing (Now Unblocked)
+### 🔲 Testing
 - [ ] Test login/signup flow end-to-end
-- [ ] Test offer submission → appears in dashboard flow
+- [ ] Test AI chat accuracy (CEO Task 3)
 - [ ] Test savings tracking flow
 - [ ] Test admin panel CRUD operations
 
-### Tier 1 Features - In Progress (Weeks 2-3)
-- [ ] **🔔 "Deal Dying" Push Alerts** (P0 - Creates daily habit)
-  - [ ] Email notification system (Resend integration)
-  - [ ] Push notification setup (Web Push API)
-  - [ ] Cron job to check expiring offers
-  - [ ] User notification preferences
-  - [ ] Alert templates
-
-- [ ] **🏷️ "Offer Stacking" Calculator** (P0 - Killer feature)
-  - [ ] Stacking algorithm: combine UPI + bank + merchant offers
-  - [ ] UI: Interactive stacking calculator
-  - [ ] Show step-by-step breakdown
-  - [ ] "Copy to clipboard" instructions
-
-- [ ] **📊 Weekly Savings Report Email** (P1 - High engagement)
-  - [ ] Email template (React Email)
-  - [ ] Cron job (runs every Sunday 8 AM)
-  - [ ] Personalized content: saved this week, missed deals, upcoming deals
-  - [ ] Unsubscribe management
-
-### Short Term (After Supabase Connected)
-- [ ] Add more payment apps (Freecharge, Slice, Jupiter, Fi Money, Navi, JioFinancial)
-- [ ] Set up `pg_cron` for hourly offer expiry
-- [ ] **Set up cron for savings streak calculation** (NEW)
-- [ ] Add Supabase Realtime subscription for live offer updates
-- [ ] "Ending Soon" badges on offer cards
-- [ ] User profile page (saved payment preferences)
-- [ ] Admin panel enhancements (bulk upload, analytics)
-
-### Medium Term (Week 2-4)
-- [ ] Chrome Extension (see offers while browsing merchant sites)
-- [ ] Email notifications (new deals for saved merchants)
-- [ ] Offer scraping pipeline (auto-discover offers from bank/app websites)
-- [ ] Analytics dashboard (Mixpanel integration)
-- [ ] SEO optimization (dynamic OG images, sitemap)
-
-### Tier 2 Features (Weeks 4-8)
-- [ ] **🎮 Gamification: "Savings Streak"** - Daily streaks with multipliers and badges
-- [ ] **🗳️ Community Trust System** - Upvote/downvote offers with verification
-- [ ] **🤖 "Ask PayWise" Smart Assistant** - Natural language payment queries
-- [ ] **📱 Payment App Wallet Balance Tracker** - Track and remind about wallet balances
-
-### Tier 3 Features (Months 2-4)
-- [ ] **🏢 "Smart Bill Pay"** - Recurring payment optimizer
-- [ ] **🧾 Receipt Scanner** - OCR to analyze missed savings
+### Future Features (Deprioritized — Focus on RAG First)
+- [ ] "Deal Dying" Push Alerts (Resend + Web Push)
+- [ ] "Offer Stacking" Calculator (interactive UI)
+- [ ] Weekly Savings Report Email (React Email + cron)
+- [ ] Chrome Extension
+- [ ] Gamification: Savings Streaks
+- [ ] Community Trust System
+- [ ] Receipt Scanner
+- [ ] Smart Bill Pay
 
 ---
 
