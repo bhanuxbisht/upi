@@ -291,6 +291,11 @@ export async function POST(request: NextRequest) {
 
         for (const txn of parsedTransactions) {
             try {
+                const parsedDate = new Date(txn.date);
+                const transactionDate = Number.isNaN(parsedDate.getTime())
+                    ? new Date().toISOString()
+                    : parsedDate.toISOString();
+
                 const { error: insertError } = await supabase
                     .from("user_transactions")
                     .insert({
@@ -299,7 +304,7 @@ export async function POST(request: NextRequest) {
                         merchant_name: txn.merchant,
                         category: txn.category,
                         payment_app: txn.paymentApp,
-                        transaction_date: txn.date,
+                        transaction_date: transactionDate,
                         description: txn.description,
                         source: source,
                     });

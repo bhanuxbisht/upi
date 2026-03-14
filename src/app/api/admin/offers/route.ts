@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { adminOfferSchema } from "@/lib/validations";
+import { publishOutboxEvent } from "@/lib/events/outbox";
+
+function revalidateOfferDependentPaths() {
+    // Keep customer-facing offer data fresh after admin mutations.
+    revalidatePath("/offers");
+    revalidatePath("/recommend");
+    revalidatePath("/admin");
+}
 
 /** POST — Create a new offer (admin only) */
 export async function POST(request: NextRequest) {
     try {
         const auth = await verifyAdmin();
         if ("error" in auth) return auth.error;
-        const { supabase } = auth;
+        const { supabase, user } = auth;
 
         const body = await request.json();
         const parsed = adminOfferSchema.safeParse(body);
@@ -49,6 +58,28 @@ export async function POST(request: NextRequest) {
                 { status: 500 }
             );
         }
+
+        try {
+            await publishOutboxEvent(
+                {
+                    eventType: "offer.created",
+                    aggregateType: "offer",
+                    aggregateId: offer.id,
+                    userId: user.id,
+                    idempotencyKey: `offer:${offer.id}:created`,
+                    payload: {
+                        status: offer.status,
+                        valid_to: offer.valid_to,
+                        verified_count: offer.verified_count,
+                    },
+                },
+                { supabase }
+            );
+        } catch (eventError) {
+            console.warn("[Admin Offers] Failed to enqueue offer.created event:", eventError);
+        }
+
+        revalidateOfferDependentPaths();
 
         return NextResponse.json({ success: true, data: offer }, { status: 201 });
     } catch {
@@ -93,7 +124,7 @@ export async function PATCH(request: NextRequest) {
     try {
         const auth = await verifyAdmin();
         if ("error" in auth) return auth.error;
-        const { supabase } = auth;
+        const { supabase, user } = auth;
 
         let body: unknown;
         try {
@@ -121,10 +152,12 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
-        const { error } = await supabase
+        const { data: updatedOffer, error } = await supabase
             .from("offers")
             .update({ status })
-            .eq("id", id);
+            .eq("id", id)
+            .select("id, status, updated_at")
+            .maybeSingle();
 
         if (error) {
             return NextResponse.json(
@@ -132,6 +165,34 @@ export async function PATCH(request: NextRequest) {
                 { status: 500 }
             );
         }
+
+        if (!updatedOffer) {
+            return NextResponse.json(
+                { success: false, error: "Offer not found" },
+                { status: 404 }
+            );
+        }
+
+        try {
+            await publishOutboxEvent(
+                {
+                    eventType: "offer.updated",
+                    aggregateType: "offer",
+                    aggregateId: updatedOffer.id,
+                    userId: user.id,
+                    idempotencyKey: `offer:${updatedOffer.id}:updated:${updatedOffer.updated_at}`,
+                    payload: {
+                        status: updatedOffer.status,
+                        updated_at: updatedOffer.updated_at,
+                    },
+                },
+                { supabase }
+            );
+        } catch (eventError) {
+            console.warn("[Admin Offers] Failed to enqueue offer.updated event:", eventError);
+        }
+
+        revalidateOfferDependentPaths();
 
         return NextResponse.json({ success: true });
     } catch {
@@ -147,7 +208,7 @@ export async function DELETE(request: NextRequest) {
     try {
         const auth = await verifyAdmin();
         if ("error" in auth) return auth.error;
-        const { supabase } = auth;
+        const { supabase, user } = auth;
 
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");
@@ -159,7 +220,12 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        const { error } = await supabase.from("offers").delete().eq("id", id);
+        const { data: deletedOffer, error } = await supabase
+            .from("offers")
+            .delete()
+            .eq("id", id)
+            .select("id")
+            .maybeSingle();
 
         if (error) {
             return NextResponse.json(
@@ -167,6 +233,33 @@ export async function DELETE(request: NextRequest) {
                 { status: 500 }
             );
         }
+
+        if (!deletedOffer) {
+            return NextResponse.json(
+                { success: false, error: "Offer not found" },
+                { status: 404 }
+            );
+        }
+
+        try {
+            await publishOutboxEvent(
+                {
+                    eventType: "offer.deleted",
+                    aggregateType: "offer",
+                    aggregateId: deletedOffer.id,
+                    userId: user.id,
+                    idempotencyKey: `offer:${deletedOffer.id}:deleted`,
+                    payload: {
+                        deleted_at: new Date().toISOString(),
+                    },
+                },
+                { supabase }
+            );
+        } catch (eventError) {
+            console.warn("[Admin Offers] Failed to enqueue offer.deleted event:", eventError);
+        }
+
+        revalidateOfferDependentPaths();
 
         return NextResponse.json({ success: true });
     } catch {

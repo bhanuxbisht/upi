@@ -13,7 +13,7 @@
  * Env var: HUGGINGFACE_API_KEY (optional — works without it but rate-limited)
  */
 
-const HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2";
+const HF_API_URL = "https://router.huggingface.co/hf-inference/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2";
 const HF_API_KEY = process.env.HUGGINGFACE_API_KEY || "";
 const EMBEDDING_DIMENSION = 384;
 
@@ -33,6 +33,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     };
     if (HF_API_KEY) {
         headers["Authorization"] = `Bearer ${HF_API_KEY}`;
+    } else {
+        throw new Error("Missing HUGGINGFACE_API_KEY in .env.local - vector search requires authentication.");
     }
 
     const response = await fetch(HF_API_URL, {
@@ -82,6 +84,8 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
     };
     if (HF_API_KEY) {
         headers["Authorization"] = `Bearer ${HF_API_KEY}`;
+    } else {
+        throw new Error("Missing HUGGINGFACE_API_KEY in .env.local - vector embedding requires authentication.");
     }
 
     const response = await fetch(HF_API_URL, {
@@ -168,8 +172,7 @@ export function buildStrategyText(strategy: {
  * Check if the embedding service is configured and available.
  */
 export function isEmbeddingConfigured(): boolean {
-    // Works without API key (rate-limited), better with it
-    return true;
+    return HF_API_KEY.length > 0;
 }
 
 export { EMBEDDING_DIMENSION };

@@ -187,7 +187,7 @@ c:\Users\Bhanu Bisht\OneDrive\Desktop\upi\
 │   └── types/                    <- database.ts, api.ts, index.ts
 ├── supabase/
 │   ├── schema.sql                <- Core tables + seed data
-│   └── migrations/               <- 002_user_savings.sql, 003_paywise_ai.sql
+│   └── migrations/               <- 002_user_savings.sql, RUN_THIS_NEXT.sql, 004_knowledge_tables.sql, 005_smart_retrieval.sql, 006_user_transactions_import_alignment.sql, 007_event_outbox.sql
 ```
 
 ---

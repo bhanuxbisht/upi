@@ -3,6 +3,7 @@
  */
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { publishOutboxEvent } from "@/lib/events/outbox";
 
 export interface TransactionInput {
     merchant_name: string;
@@ -14,6 +15,8 @@ export interface TransactionInput {
     cashback_received?: number;
     offer_used_id?: string;
     notes?: string;
+    description?: string;
+    source?: "manual" | "sms" | "bank-statement" | "manual-paste";
     transaction_date?: string;
 }
 
@@ -72,12 +75,35 @@ export async function createTransaction(
             cashback_received: input.cashback_received || 0,
             offer_used_id: input.offer_used_id || null,
             notes: input.notes || null,
+            description: input.description || null,
+            source: input.source || "manual",
             transaction_date: input.transaction_date || new Date().toISOString(),
         })
         .select()
         .single();
 
     if (error) throw new Error(`Failed to create transaction: ${error.message}`);
+
+    try {
+        await publishOutboxEvent({
+            eventType: "transaction.created",
+            aggregateType: "transaction",
+            aggregateId: data.id,
+            userId,
+            idempotencyKey: `transaction:${data.id}:created`,
+            payload: {
+                amount: data.amount,
+                category: data.category,
+                payment_app: data.payment_app,
+                source: data.source,
+                transaction_date: data.transaction_date,
+            },
+        });
+    } catch (eventError) {
+        // Outbox failures should not block transaction logging.
+        console.warn("[TransactionService] Failed to enqueue transaction event:", eventError);
+    }
+
     return data;
 }
 

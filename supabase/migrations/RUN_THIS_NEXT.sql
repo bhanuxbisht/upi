@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS user_transactions (
     could_have_saved DECIMAL(10, 2) DEFAULT 0,
     optimal_app TEXT,
     
+    description TEXT CHECK (description IS NULL OR LENGTH(description) <= 500),
+    source TEXT DEFAULT 'manual' CHECK (source IN ('manual', 'sms', 'bank-statement', 'manual-paste')),
     notes TEXT CHECK (notes IS NULL OR LENGTH(notes) <= 500),
     transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -239,6 +241,7 @@ CREATE INDEX IF NOT EXISTS idx_user_transactions_user_id ON user_transactions(us
 CREATE INDEX IF NOT EXISTS idx_user_transactions_date ON user_transactions(user_id, transaction_date DESC);
 CREATE INDEX IF NOT EXISTS idx_user_transactions_category ON user_transactions(user_id, category);
 CREATE INDEX IF NOT EXISTS idx_user_transactions_merchant ON user_transactions(user_id, merchant_name);
+CREATE INDEX IF NOT EXISTS idx_user_transactions_source ON user_transactions(user_id, source);
 
 
 -- -----------------------------------------------

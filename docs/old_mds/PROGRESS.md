@@ -95,7 +95,7 @@ A deep codebase audit revealed that PayWise's "AI" is actually a **prompt-engine
 - [x] **AI usage tracking** — Free: 3 queries/day, Pro: unlimited
 
 #### Database Migration
-- [x] **7 new tables** in `supabase/migrations/003_paywise_ai.sql`:
+- [x] **7 new tables** in `supabase/migrations/RUN_THIS_NEXT.sql`:
   - `user_profiles` — Payment preferences, cards, budgets, Pro status
   - `user_transactions` — Transaction journal with auto-computed missed savings
   - `ai_conversations` — Chat history with LLM context
@@ -131,7 +131,11 @@ A deep codebase audit revealed that PayWise's "AI" is actually a **prompt-engine
 ### Setup Required
 1. Run `npm install` to install dependencies
 2. Add `GROQ_API_KEY=your-key-here` to `.env.local`
-3. Run `supabase/migrations/003_paywise_ai.sql` in Supabase SQL Editor
+3. Run `supabase/migrations/RUN_THIS_NEXT.sql` in Supabase SQL Editor
+4. Run `supabase/migrations/004_knowledge_tables.sql`
+5. Run `supabase/migrations/005_smart_retrieval.sql`
+6. If upgrading an existing DB, run `supabase/migrations/006_user_transactions_import_alignment.sql`
+7. Run `supabase/migrations/007_event_outbox.sql`
 
 ---
 
@@ -354,7 +358,11 @@ paywise/
 │   ├── schema.sql                      ← Complete DB schema + seed data ✅ RUN
 │   └── migrations/
 │       ├── 002_user_savings.sql        ← User savings tracking ✅ RUN
-│       └── 003_paywise_ai.sql          ← AI system tables (7 tables) ✅ RUN
+│       ├── RUN_THIS_NEXT.sql           ← AI system tables (7 tables) ✅ RUN
+│       ├── 004_knowledge_tables.sql    ← Knowledge DB tables + freshness metadata ✅ RUN
+│       ├── 005_smart_retrieval.sql     ← Hybrid retrieval (FTS + vector) ✅ RUN
+│       ├── 006_user_transactions_import_alignment.sql ← Compatibility alignment ✅ RUN (existing DBs)
+│       └── 007_event_outbox.sql        ← Event-driven queue foundation ✅ RUN
 ├── src/
 │   ├── proxy.ts                        ← Auth session refresh
 │   ├── app/

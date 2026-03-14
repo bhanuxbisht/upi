@@ -4,6 +4,7 @@ export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  meta?: Record<string, unknown>;
 }
 
 /** "Best Way to Pay" recommendation result */

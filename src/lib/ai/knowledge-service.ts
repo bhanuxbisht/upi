@@ -24,6 +24,125 @@ import {
     type Strategy,
 } from "./knowledge/payment-strategies";
 
+type FreshnessSource = "database" | "fallback";
+
+interface FreshnessRow {
+    last_verified_date: string | null;
+    confidence_level: string | null;
+}
+
+export interface KnowledgeDatasetFreshness {
+    source: FreshnessSource;
+    activeCount: number;
+    lastVerifiedAt: string | null;
+    lowConfidenceCount: number;
+}
+
+export interface KnowledgeFreshnessSnapshot {
+    generatedAt: string;
+    overallSource: "database" | "mixed" | "fallback";
+    creditCards: KnowledgeDatasetFreshness;
+    upiApps: KnowledgeDatasetFreshness;
+    strategies: KnowledgeDatasetFreshness;
+}
+
+function getLatestVerifiedAt(rows: FreshnessRow[]): string | null {
+    let latestMs = 0;
+
+    for (const row of rows) {
+        if (!row.last_verified_date) continue;
+        const ms = Date.parse(row.last_verified_date);
+        if (!Number.isNaN(ms) && ms > latestMs) latestMs = ms;
+    }
+
+    return latestMs > 0 ? new Date(latestMs).toISOString() : null;
+}
+
+function summarizeDatasetFreshness(
+    rows: FreshnessRow[] | null,
+    source: FreshnessSource,
+    fallbackCount: number
+): KnowledgeDatasetFreshness {
+    if (source === "fallback" || !rows) {
+        return {
+            source,
+            activeCount: fallbackCount,
+            lastVerifiedAt: null,
+            lowConfidenceCount: 0,
+        };
+    }
+
+    return {
+        source,
+        activeCount: rows.length,
+        lastVerifiedAt: getLatestVerifiedAt(rows),
+        lowConfidenceCount: rows.filter((row) => {
+            const level = row.confidence_level?.toLowerCase();
+            return level === "community" || level === "unverified";
+        }).length,
+    };
+}
+
+/**
+ * Returns a compact freshness/confidence snapshot for all knowledge datasets.
+ * Used by AI routes to expose trust metadata in every response.
+ */
+export async function getKnowledgeFreshnessSnapshot(): Promise<KnowledgeFreshnessSnapshot> {
+    const generatedAt = new Date().toISOString();
+
+    const fallbackSnapshot: KnowledgeFreshnessSnapshot = {
+        generatedAt,
+        overallSource: "fallback",
+        creditCards: summarizeDatasetFreshness(null, "fallback", CREDIT_CARDS.length),
+        upiApps: summarizeDatasetFreshness(null, "fallback", UPI_APPS.length),
+        strategies: summarizeDatasetFreshness(null, "fallback", OFFER_STACKING_STRATEGIES.length),
+    };
+
+    try {
+        const supabase = await getSupabaseServerClient();
+
+        const [cardsRes, upiRes, strategiesRes] = await Promise.all([
+            supabase
+                .from("knowledge_credit_cards")
+                .select("last_verified_date, confidence_level")
+                .eq("is_active", true),
+            supabase
+                .from("knowledge_upi_apps")
+                .select("last_verified_date, confidence_level")
+                .eq("is_active", true),
+            supabase
+                .from("knowledge_strategies")
+                .select("last_verified_date, confidence_level")
+                .eq("is_active", true),
+        ]);
+
+        const cardsRows = (cardsRes.data ?? null) as FreshnessRow[] | null;
+        const upiRows = (upiRes.data ?? null) as FreshnessRow[] | null;
+        const strategyRows = (strategiesRes.data ?? null) as FreshnessRow[] | null;
+
+        const cardsSource: FreshnessSource = !cardsRes.error && (cardsRows?.length ?? 0) > 0 ? "database" : "fallback";
+        const upiSource: FreshnessSource = !upiRes.error && (upiRows?.length ?? 0) > 0 ? "database" : "fallback";
+        const strategiesSource: FreshnessSource = !strategiesRes.error && (strategyRows?.length ?? 0) > 0 ? "database" : "fallback";
+
+        const sources: FreshnessSource[] = [cardsSource, upiSource, strategiesSource];
+        const overallSource = sources.every((s) => s === "database")
+            ? "database"
+            : sources.every((s) => s === "fallback")
+                ? "fallback"
+                : "mixed";
+
+        return {
+            generatedAt,
+            overallSource,
+            creditCards: summarizeDatasetFreshness(cardsRows, cardsSource, CREDIT_CARDS.length),
+            upiApps: summarizeDatasetFreshness(upiRows, upiSource, UPI_APPS.length),
+            strategies: summarizeDatasetFreshness(strategyRows, strategiesSource, OFFER_STACKING_STRATEGIES.length),
+        };
+    } catch {
+        return fallbackSnapshot;
+    }
+}
+
 // ============================================================
 // CREDIT CARDS
 // ============================================================

@@ -11,11 +11,14 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { analyzeQuery, buildKnowledgeContext } from "./query-analyzer";
-import { buildDatabaseKnowledgeContext, buildSmartKnowledgeContext } from "./knowledge-service";
+import {
+    buildDatabaseKnowledgeContext,
+    buildSmartKnowledgeContext,
+    getCreditCards,
+    getUPIApps,
+    getStrategies,
+} from "./knowledge-service";
 import { calculateBestPayment, calculateBestCard, calculateBestBillPayment, formatCalculationForLLM } from "./payment-calculator";
-import { CREDIT_CARDS } from "./knowledge/credit-cards";
-import { UPI_APPS } from "./knowledge/upi-apps";
-import { OFFER_STACKING_STRATEGIES } from "./knowledge/payment-strategies";
 
 export interface UserContext {
     profile: {
@@ -206,6 +209,14 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
     if (userQuery) {
         try {
             const analysis = analyzeQuery(userQuery);
+
+            // Prefer DB-backed knowledge for deterministic calculations.
+            // Each service falls back to TypeScript data if DB is unavailable.
+            const [liveCreditCards, liveUPIApps, liveStrategies] = await Promise.all([
+                getCreditCards(),
+                getUPIApps(),
+                getStrategies(),
+            ]);
             
             // ═══════════════════════════════════════════════════════
             // LAYER 0: DETERMINISTIC CALCULATOR (accuracy-first)
@@ -223,9 +234,9 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
                     const calcResult = calculateBestPayment(
                         analysis.merchants[0],
                         analysis.amount,
-                        CREDIT_CARDS,
-                        UPI_APPS,
-                        OFFER_STACKING_STRATEGIES
+                        liveCreditCards,
+                        liveUPIApps,
+                        liveStrategies
                     );
                     calculatedContext = formatCalculationForLLM(calcResult);
                 } else if (
@@ -236,8 +247,8 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
                     const billResult = calculateBestBillPayment(
                         analysis.categories[0],
                         analysis.amount,
-                        CREDIT_CARDS,
-                        UPI_APPS
+                        liveCreditCards,
+                        liveUPIApps
                     );
                     calculatedContext = [
                         `[CALCULATED BILL OPTIMIZATION — These numbers are VERIFIED]`,
@@ -256,7 +267,7 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
                     for (const cat of analysis.categories) {
                         profile[cat] = analysis.amount || 5000; // default ₹5000/month if no amount
                     }
-                    const cardResults = calculateBestCard(profile, CREDIT_CARDS);
+                    const cardResults = calculateBestCard(profile, liveCreditCards);
                     const top3 = cardResults.slice(0, 3);
                     calculatedContext = [
                         `[CALCULATED CARD COMPARISON — These numbers are VERIFIED]`,

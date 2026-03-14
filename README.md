@@ -58,7 +58,13 @@ cp .env.example .env.local
 # Set up database
 # Run supabase/schema.sql in Supabase SQL Editor
 # Run supabase/migrations/002_user_savings.sql
-# Run supabase/migrations/003_paywise_ai.sql
+# Run supabase/migrations/RUN_THIS_NEXT.sql
+# Run supabase/migrations/004_knowledge_tables.sql
+# Run supabase/migrations/005_smart_retrieval.sql
+
+# If your project already has older AI tables, also run:
+# supabase/migrations/006_user_transactions_import_alignment.sql
+# supabase/migrations/007_event_outbox.sql
 
 # Start dev server
 npm run dev

@@ -11,9 +11,7 @@
 import {
     getBestCardForMerchant,
     getBestCardsForCategory,
-    getCardRecommendation,
     getOptimalAppStack,
-    getStrategiesForApps,
     getBestUPIAppForCategory,
     getRelevantStrategies,
     estimateMonthlySavings,

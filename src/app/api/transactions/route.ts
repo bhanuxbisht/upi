@@ -24,6 +24,8 @@ const transactionSchema = z.object({
     cashback_received: z.number().min(0).max(100_000).optional(),
     offer_used_id: z.string().uuid().optional(),
     notes: z.string().max(500).optional(),
+    description: z.string().max(500).optional(),
+    source: z.enum(["manual", "sms", "bank-statement", "manual-paste"]).optional(),
     transaction_date: z.string().optional(),
 });
 

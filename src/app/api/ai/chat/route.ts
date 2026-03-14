@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { chatWithPayWise, type ChatMessage } from "@/lib/ai/gemini";
 import { buildUserContext } from "@/lib/ai/context-builder";
+import { getKnowledgeFreshnessSnapshot, type KnowledgeFreshnessSnapshot } from "@/lib/ai/knowledge-service";
 import { checkAIUsageLimit, incrementAIUsage } from "@/services/profiles";
 import { logAudit } from "@/lib/security/audit";
 import { createRateLimiter } from "@/lib/rate-limit";
@@ -18,6 +19,20 @@ const chatSchema = z.object({
     message: z.string().min(1, "Message is required").max(2000, "Message too long"),
     conversationId: z.string().uuid().optional().nullable(),
 });
+
+function formatKnowledgeFreshnessForContext(snapshot: KnowledgeFreshnessSnapshot): string {
+    const lines = [
+        "--- KNOWLEDGE FRESHNESS METADATA ---",
+        `Generated at: ${snapshot.generatedAt}`,
+        `Knowledge source mode: ${snapshot.overallSource}`,
+        `Credit cards: source=${snapshot.creditCards.source}, active=${snapshot.creditCards.activeCount}, last_verified=${snapshot.creditCards.lastVerifiedAt || "unknown"}, low_confidence=${snapshot.creditCards.lowConfidenceCount}`,
+        `UPI apps: source=${snapshot.upiApps.source}, active=${snapshot.upiApps.activeCount}, last_verified=${snapshot.upiApps.lastVerifiedAt || "unknown"}, low_confidence=${snapshot.upiApps.lowConfidenceCount}`,
+        `Strategies: source=${snapshot.strategies.source}, active=${snapshot.strategies.activeCount}, last_verified=${snapshot.strategies.lastVerifiedAt || "unknown"}, low_confidence=${snapshot.strategies.lowConfidenceCount}`,
+        "If source is fallback or low_confidence is high, clearly mark recommendations as tentative.",
+    ];
+
+    return lines.join("\n");
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -92,10 +107,25 @@ export async function POST(request: NextRequest) {
         // Build user context (resilient — returns empty string on failure)
         // Now includes KNOWLEDGE INJECTION based on the user's query
         let userContext = "";
-        try {
-            userContext = await buildUserContext(user.id, message);
-        } catch (ctxError) {
-            console.warn("[AI Chat] Context build failed, continuing without context:", ctxError);
+        let knowledgeFreshness: KnowledgeFreshnessSnapshot | null = null;
+
+        const [contextResult, freshnessResult] = await Promise.allSettled([
+            buildUserContext(user.id, message),
+            getKnowledgeFreshnessSnapshot(),
+        ]);
+
+        if (contextResult.status === "fulfilled") {
+            userContext = contextResult.value;
+        } else {
+            console.warn("[AI Chat] Context build failed, continuing without context:", contextResult.reason);
+        }
+
+        if (freshnessResult.status === "fulfilled") {
+            knowledgeFreshness = freshnessResult.value;
+            const freshnessContext = formatKnowledgeFreshnessForContext(knowledgeFreshness);
+            userContext = [userContext, freshnessContext].filter(Boolean).join("\n\n");
+        } else {
+            console.warn("[AI Chat] Knowledge freshness snapshot failed:", freshnessResult.reason);
         }
 
         // Get AI response
@@ -164,6 +194,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             response: aiResponse.response,
             conversationId: activeConversationId,
+            knowledgeFreshness,
             usage: {
                 used: usageLimit.used + 1,
                 limit: usageLimit.limit,
