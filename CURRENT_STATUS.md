@@ -3,18 +3,13 @@
 Last Updated: March 24, 2026
 
 ## ✅ What We Just Finished
-*   **Database Master Restructure:** Reorganized all flat seed/patch SQL files into pristine, bank-specific folders (`supabase/sbi-cards/`, `supabase/hdfc-cards/`, `supabase/axis-cards/`).
-*   **Deep Research Audit (Zero-Hallucination):** 100% audited all 88 existing and missing cards across SBI, HDFC, and Axis Bank. All fees, reward rates, point conversions, penalty slabs, forex, and inclusions are verified exclusively via official bank websites and `paisabazaar.com`.
-*   **Mathematical Error Correction:** Fixed major logic errors from earlier files, including:
-    * Swapped Magnus Travel EDGE math correctly (60 pts up to ₹2L, not the reverse).
-    * Updated Paytm SBI fee waivers to absolute accuracy (no waiver for base, ₹2L for Select).
-    * Removed check constraint violations (`network` ENUM strict compliance: Visa, Mastercard, RuPay).
-    * Deactivated discontinued cards (Axis Vistara, HDFC 6E, HDFC Solitaire).
-*   **Complete Coverage:** Wrote `patch_` SQL scripts to insert all missing portfolio cards (e.g., PhonePe SBI, Flipkart SBI, HDFC Freedom, Tata Neu).
-*   **SQL Safety:** Implemented `DELETE FROM` statements at the top of every script to ensure multiple executions are 100% idempotent without triggering duplicate constraints.
+*   **Database Master Restructure:** Reorganized all flat seed/patch SQL files into pristine, bank-specific folders (`supabase/sbi-cards/`, `supabase/hdfc-cards/`, `supabase/axis-cards/`). All 88 existing cards audited against strict rules.
+*   **Deterministic Penalty Calculator:** Built `penalty-calculator.ts` with GST inclusion and realistic "Date of Transaction" interest math (45-day default for missed payments) so the AI never hallucinates penalties.
+*   **AI Context & UI Overhaul:** Swapped the chat interface to use `react-markdown` and Tailwind Typography (`prose`). The AI is now explicitly prompted to output strict, richly formatted Markdown tables for calculations instead of generic paragraphs.
+*   **Massive Code Cleanup:** Sliced away ~900 lines of redundant fallback TypeScript code from `credit-cards.ts`, `context-builder.ts`, and `query-analyzer.ts`, forcing the AI to strictly rely on the Supabase dynamic engine.
 
-## 🚀 What We Have To Do Next
-*   **Build Penalty Calculator:** Add `calculateLateFee()` function to `payment-calculator.ts` that reads the `penalties` JSON and computes exact fines based on custom bank rules.
-*   **Wire Penalties to Knowledge Service:** Update `knowledge-service.ts` to actively consume `penalties` and `reward_math` data rather than generating abstract AI estimations.
-*   **Test the Calculator Engine:** Ensure that chat correctly outputs exact rupee amounts for both SBI penalty queries and HDFC reward estimations.
-*   **Expand to Fourth Bank:** Begin deep research and DB seeding for **ICICI Bank** using the exact same strict protocol.
+## 🚀 What We Have To Do Next (MVP Funding Roadmap)
+*   **User Memory Dashboard:** Design and build the User Profile schema so the app permanently remembers the user's cards and spending habits. This is required to provide personalized AI advice without manual typing every time.
+*   **ICICI Bank Portfolio Integration:** Start seeding the ICICI Bank card portfolio structure to expand our coverage.
+*   **UPI Flow & Offers Architecture:** Flesh out the UPI apps functionality and the contextual Offers database integration.
+*   **MVP Polish:** Our goal is funding. We must build out every critical MVP segment end-to-end to show a deeply integrated product before we focus too hard on populating the remaining hundreds of obscure credit cards.

@@ -6,12 +6,12 @@
  */
 
 export { 
-    CREDIT_CARDS, 
-    getBestCardsForCategory, 
-    getBestCardForMerchant, 
-    getCardRecommendation,
     type CreditCard,
     type CreditCardReward,
+    type RewardMath,
+    type RewardMathCategory,
+    type PenaltyMatrix,
+    type LateFeeSlab
 } from "./credit-cards";
 
 export { 

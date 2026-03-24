@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Bot, User, Loader2, RotateCcw, Zap, CreditCard, PiggyBank, MessageCircle, TrendingDown, Receipt, ShieldCheck, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
     role: "user" | "assistant";
@@ -319,9 +321,17 @@ export default function AskPage() {
                                         : "bg-muted/50 border border-border text-foreground"
                                         }`}
                                 >
-                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                                        {msg.content}
-                                    </div>
+                                    {msg.role === "assistant" ? (
+                                        <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-li:my-0.5">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                            {msg.content}
+                                        </div>
+                                    )}
                                     <div
                                         className={`mt-2 text-xs opacity-50 text-right`}
                                     >

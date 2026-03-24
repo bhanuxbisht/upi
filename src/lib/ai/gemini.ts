@@ -125,7 +125,7 @@ async function chatWithGroq(
     const tokensUsed = data.usage?.total_tokens || Math.ceil((enrichedMessage.length + rawText.length) / 4);
 
     return {
-        response: stripMarkdown(rawText),
+        response: rawText,
         tokensUsed,
         model: GROQ_MODEL,
     };

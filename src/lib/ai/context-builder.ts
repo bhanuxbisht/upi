@@ -10,7 +10,7 @@
  */
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { analyzeQuery, buildKnowledgeContext } from "./query-analyzer";
+import { analyzeQuery } from "./query-analyzer";
 import {
     buildDatabaseKnowledgeContext,
     buildSmartKnowledgeContext,
@@ -19,6 +19,7 @@ import {
     getStrategies,
 } from "./knowledge-service";
 import { calculateBestPayment, calculateBestCard, calculateBestBillPayment, formatCalculationForLLM } from "./payment-calculator";
+import { calculateLateFee, calculateInterestCharge, calculateForexCost, calculateFullPenalty, formatPenaltyForLLM, formatForexForLLM } from "./penalty-calculator";
 
 export interface UserContext {
     profile: {
@@ -280,6 +281,67 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
                         ].join("\n")),
                         `[IMPORTANT: Present these cards with the exact ₹ numbers shown above.]`,
                     ].join("\n");
+                } else if (
+                    (analysis.intent === "penalty_query" || analysis.intent === "late_fee" || analysis.intent === "interest_charge") &&
+                    analysis.creditCards.length > 0 &&
+                    analysis.amount
+                ) {
+                    // Dynamic fuzzy match: creditCards now contains "BANK:cardname" fragments
+                    const cardQuery = analysis.creditCards[0]; // e.g., "HDFC:regalia"
+                    let matchedCard = null;
+
+                    if (cardQuery.includes(":")) {
+                        const [bankHint, nameHint] = cardQuery.split(":");
+                        // Find the best matching card from the live DB
+                        matchedCard = liveCreditCards.find(c => {
+                            const bankMatch = c.bank.toLowerCase().includes(bankHint.toLowerCase());
+                            const nameMatch = c.name.toLowerCase().includes(nameHint.toLowerCase()) ||
+                                              c.id.toLowerCase().includes(nameHint.toLowerCase());
+                            return bankMatch && nameMatch;
+                        });
+                        // If no exact match, try just the name across all banks
+                        if (!matchedCard) {
+                            matchedCard = liveCreditCards.find(c =>
+                                c.name.toLowerCase().includes(nameHint.toLowerCase()) ||
+                                c.id.toLowerCase().includes(nameHint.toLowerCase())
+                            );
+                        }
+                    } else {
+                        // Legacy: direct ID match (shouldn't happen anymore, but safe fallback)
+                        matchedCard = liveCreditCards.find(c => c.id === cardQuery);
+                    }
+
+                    if (matchedCard) {
+                        console.log(`[ContextBuilder] ✅ Matched card: ${matchedCard.bank} ${matchedCard.name} (id: ${matchedCard.id})`);
+                        console.log(`[ContextBuilder] Penalties data present: ${!!matchedCard.penalties}`);
+                        const penaltyResult = calculateFullPenalty(matchedCard, analysis.amount, 45);
+                        calculatedContext = formatPenaltyForLLM(penaltyResult);
+                        console.log(`[ContextBuilder] Calculator output length: ${calculatedContext.length} chars`);
+                    } else {
+                        console.warn(`[ContextBuilder] ❌ No card matched for query: "${cardQuery}". Available cards: ${liveCreditCards.map(c => c.id).join(", ").substring(0, 200)}`);
+                    }
+                } else if (
+                    analysis.intent === "forex_cost" &&
+                    analysis.creditCards.length > 0 &&
+                    analysis.amount
+                ) {
+                    const cardQuery = analysis.creditCards[0];
+                    let matchedCard = null;
+                    if (cardQuery.includes(":")) {
+                        const [bankHint, nameHint] = cardQuery.split(":");
+                        matchedCard = liveCreditCards.find(c =>
+                            c.bank.toLowerCase().includes(bankHint.toLowerCase()) &&
+                            (c.name.toLowerCase().includes(nameHint.toLowerCase()) || c.id.toLowerCase().includes(nameHint.toLowerCase()))
+                        ) || liveCreditCards.find(c =>
+                            c.name.toLowerCase().includes(nameHint.toLowerCase()) || c.id.toLowerCase().includes(nameHint.toLowerCase())
+                        );
+                    } else {
+                        matchedCard = liveCreditCards.find(c => c.id === cardQuery);
+                    }
+                    if (matchedCard) {
+                        const forexResult = calculateForexCost(matchedCard, analysis.amount);
+                        if (forexResult) calculatedContext = formatForexForLLM(forexResult);
+                    }
                 }
             } catch (calcError) {
                 console.warn("[ContextBuilder] Calculator failed, continuing with knowledge fallback:", calcError);
@@ -317,9 +379,10 @@ export async function buildUserContext(userId: string, userQuery?: string): Prom
                 }
             }
             
-            // LAYER 3: TypeScript hardcoded fallback (always works, never breaks)
+            // Removed Layer 3: Hardcoded TypeScript fallback removed.
+            // If DB is offline, the AI will just say it has no knowledge context.
             if (!knowledgeContext) {
-                knowledgeContext = buildKnowledgeContext(analysis);
+                knowledgeContext = "[No specific knowledge context could be fetched from the database for this query.]";
             }
         } catch (err) {
             console.warn("[ContextBuilder] Knowledge injection failed:", err);

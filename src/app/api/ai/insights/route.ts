@@ -14,7 +14,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { 
-    getBestCardForMerchant, 
     estimateMonthlySavings,
     getOptimalAppStack,
     SUBSCRIPTION_OPTIMIZATION,
@@ -57,46 +56,9 @@ export async function GET(request: NextRequest) {
 
         const insights: Insight[] = [];
 
-        // 1. MISSED SAVINGS — Check recent transactions for suboptimal payments
-        try {
-            const { data: recentTxns } = await supabase
-                .from("user_transactions")
-                .select("*")
-                .eq("user_id", user.id)
-                .order("transaction_date", { ascending: false })
-                .limit(20);
-
-            if (recentTxns && recentTxns.length > 0) {
-                for (const txn of recentTxns.slice(0, 5)) {
-                    const betterOptions = getBestCardForMerchant(
-                        txn.merchant_name || "",
-                        Number(txn.amount)
-                    );
-
-                    if (betterOptions.length > 0) {
-                        const bestOption = betterOptions[0];
-                        const currentSavings = Number(txn.cashback_received || 0);
-
-                        if (bestOption.savings > currentSavings + 5) {
-                            insights.push({
-                                id: `missed-${txn.id}`,
-                                type: "missed-saving",
-                                title: `Missed ₹${(bestOption.savings - currentSavings).toFixed(0)} at ${txn.merchant_name}`,
-                                description: `Your ₹${Number(txn.amount).toFixed(0)} payment at ${txn.merchant_name} via ${txn.payment_app} could've saved ₹${bestOption.savings.toFixed(0)} more using ${bestOption.card.bank} ${bestOption.card.name}.`,
-                                savingsAmount: bestOption.savings - currentSavings,
-                                action: `Use ${bestOption.card.bank} ${bestOption.card.name} next time`,
-                                actionLink: "/recommend",
-                                urgency: bestOption.savings > 100 ? "high" : "medium",
-                                category: txn.category,
-                                icon: "💸",
-                            });
-                        }
-                    }
-                }
-            }
-        } catch {
-            // Table may not exist yet
-        }
+        // 1. MISSED SAVINGS — temporarily disabled until DB-backed calculator is integrated
+        // The old getBestCardForMerchant was deleted (it used stale hardcoded data).
+        // TODO: Wire this to the DB-backed payment-calculator.ts for accurate missed savings.
 
         // 2. SPENDING ALERTS — Detect high spending categories
         try {

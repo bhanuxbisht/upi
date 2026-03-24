@@ -17,7 +17,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { generateEmbedding } from "./embedding-service";
 
 // Type-only imports — data arrays removed; DB is now the single source of truth
-import type { CreditCard } from "./knowledge/credit-cards";
+import type { CreditCard, PenaltyMatrix } from "./knowledge/credit-cards";
 import type { UPIAppProfile } from "./knowledge/upi-apps";
 import type { Strategy } from "./knowledge/payment-strategies";
 
@@ -173,6 +173,7 @@ interface DBCreditCard {
     cons: string[];
     is_active: boolean;
     reward_math: Record<string, unknown> | null;
+    penalties: Record<string, unknown> | null;
 }
 
 /**
@@ -207,6 +208,7 @@ function dbToCreditCard(row: DBCreditCard): CreditCard {
         pros: row.pros || [],
         cons: row.cons || [],
         rewardMath: row.reward_math as CreditCard["rewardMath"] ?? null,
+        penalties: row.penalties as PenaltyMatrix | null ?? null,
     };
 }
 
@@ -391,6 +393,20 @@ export async function buildDatabaseKnowledgeContext(
                 const topReward = card.rewards.sort((a, b) => b.rewardRate - a.rewardRate)[0];
                 const rewardSummary = card.rewards.map((r) => `${r.category}: ${r.rewardRate}% ${r.rewardType}`).join(", ");
                 parts.push(`- ${card.bank} ${card.name} (${card.tier}, ${card.network}): Fee ₹${card.annualFee}${card.feeWaiver ? ` (${card.feeWaiver})` : ""}. Best rate: ${topReward?.rewardRate || 0}% ${topReward?.rewardType || ""}. Categories: ${rewardSummary}. Best for: ${card.bestFor.join(", ")}`);
+            }
+        }
+
+        // Penalty/charges data — for late fee, interest, forex queries
+        if (intent === "penalty_query" || intent === "late_fee" || intent === "interest_charge" || intent === "forex_cost" || intent === "card_recommendation" || intent === "general_advice") {
+            const cardsWithPenalties = creditCards.filter(c => c.penalties);
+            if (cardsWithPenalties.length > 0) {
+                parts.push("\n[PENALTY DATA — Verified late fees, APR, forex for each card:]");
+                for (const card of cardsWithPenalties) {
+                    const p = card.penalties;
+                    if (!p) continue;
+                    const slabSummary = p.late_fees?.map(s => `₹${s.min}-${s.max}→₹${s.fee}`).join(", ") || "N/A";
+                    parts.push(`- ${card.bank} ${card.name}: APR ${p.apr_monthly}%/mo (${(p.apr_monthly * 12).toFixed(1)}% p.a.), Forex ${p.forex_markup_percent}%, Interest-free ${p.interest_free_period_days}d, Late Fee Slabs: [${slabSummary}]${p.note ? ` | Note: ${p.note}` : ""}`);
+                }
             }
         }
 
