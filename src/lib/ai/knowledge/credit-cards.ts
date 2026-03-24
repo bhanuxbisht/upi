@@ -33,6 +33,7 @@ export interface CreditCard {
     network: "Visa" | "Mastercard" | "RuPay" | "Amex" | "Diners";
     tier: "entry" | "mid" | "premium" | "super-premium";
     rewards: CreditCardReward[];
+    rewardMath?: RewardMath | null; // Deterministic calculator rules from DB
     loungeAccess?: string;
     fuelSurchargeWaiver: boolean;
     bestFor: string[]; // categories where this card shines
@@ -41,6 +42,24 @@ export interface CreditCard {
     incomeRequirement?: string;
     pros: string[];
     cons: string[];
+}
+
+// Strict deterministic math engine types — used by payment-calculator.ts
+export interface RewardMathCategory {
+    keywords: string[];
+    rate: number;
+    cashback_rate?: number; // For mixed type cards (e.g. Titan)
+    max_cap_points_monthly?: number;
+    max_cap_points_yearly?: number;
+}
+
+export interface RewardMath {
+    type: "cashback" | "points" | "mixed";
+    point_value_rupees?: number;  // ₹ per point (e.g. 0.25 for SBI points, 1.0 for IRCTC)
+    spend_divisor?: number;       // How much spend = 1 point (usually 100)
+    default_rate: number;         // Default multiplier or % for unmatched categories
+    categories: RewardMathCategory[];
+    exclusions?: string[];        // Categories that earn NOTHING
 }
 
 /**

@@ -8,16 +8,16 @@
  * The LLM receives the CALCULATED result and only formats it.
  * 
  * Flow:
- * 1. User says "best way to pay ₹800 at Swiggy"
- * 2. Calculator computes exact savings for every card + UPI app
- * 3. Calculator returns ranked results with ₹ amounts
- * 4. LLM receives: "HDFC Swiggy: ₹80 (10%), SBI Cashback: ₹40 (5%)"
+ * 1. User says "best way to pay ₹50,000 at Amazon"
+ * 2. Calculator reads `reward_math` JSON from the DB for each card
+ * 3. Matches merchant keywords → applies correct rate, caps, point value
+ * 4. Returns ranked results with EXACT ₹ amounts
  * 5. LLM writes a nice response USING these exact numbers
  * 
  * The numbers are NEVER wrong because they come from code, not LLM generation.
  */
 
-import type { CreditCard } from "./knowledge/credit-cards";
+import type { CreditCard, RewardMath, RewardMathCategory } from "./knowledge/credit-cards";
 import type { UPIAppProfile } from "./knowledge/upi-apps";
 import type { Strategy } from "./knowledge/payment-strategies";
 
@@ -27,12 +27,12 @@ import type { Strategy } from "./knowledge/payment-strategies";
 
 export interface PaymentOption {
     rank: number;
-    method: string;          // "HDFC Swiggy Card via PhonePe"
-    savings: number;         // ₹80
-    savingsPercent: number;  // 10
-    breakdown: string[];     // ["Card cashback: ₹80 (10%)", "PhonePe coupon: ₹50"]
-    totalSavings: number;    // ₹130 (if stacked)
-    warnings: string[];      // ["Max ₹1500/month cap", "Only on app orders"]
+    method: string;          // "SBI Card CASHBACK SBI Card"
+    savings: number;         // ₹2500
+    savingsPercent: number;  // 5
+    breakdown: string[];     // ["Cashback: ₹2500 (5% on online)"]
+    totalSavings: number;    // ₹2500
+    warnings: string[];      // ["Max ₹5000/month cap"]
     confidence: "exact" | "estimated" | "approximate";
 }
 
@@ -44,42 +44,205 @@ export interface CalculationResult {
     topOptions: PaymentOption[];
     bestOption: PaymentOption | null;
     stackingTip: string | null;
-    quickSummary: string;    // "Save ₹130 on your ₹800 Swiggy order using HDFC Swiggy + PhonePe"
+    quickSummary: string;    // "Save ₹2500 on your ₹50000 Amazon order using SBI CASHBACK"
 }
 
 // ============================================================
-// MERCHANT-CATEGORY MAP (for matching)
+// MERCHANT → KEYWORD MAP (for matching reward_math keywords)
 // ============================================================
 
-const MERCHANT_TO_CATEGORIES: Record<string, string[]> = {
-    "swiggy": ["food-delivery", "dining"],
-    "zomato": ["food-delivery", "dining"],
-    "amazon": ["amazon", "online-shopping"],
-    "flipkart": ["flipkart", "online-shopping"],
-    "myntra": ["flipkart", "online-shopping"],
-    "bigbasket": ["groceries"],
-    "blinkit": ["groceries"],
-    "zepto": ["groceries"],
-    "makemytrip": ["travel"],
-    "goibibo": ["travel"],
-    "cleartrip": ["travel"],
-    "ola": ["travel"],
-    "uber": ["travel"],
-    "rapido": ["travel"],
-    "bookmyshow": ["entertainment"],
-    "netflix": ["entertainment", "streaming"],
-    "spotify": ["entertainment", "streaming"],
-    "jio": ["bills-recharges"],
-    "airtel": ["bills-recharges"],
-    "vi": ["bills-recharges"],
-    "starbucks": ["dining", "food-delivery"],
-    "nykaa": ["online-shopping"],
-    "croma": ["online-shopping", "electronics"],
-    "reliance": ["online-shopping"],
+const MERCHANT_TO_KEYWORDS: Record<string, string[]> = {
+    "swiggy": ["swiggy", "food", "online"],
+    "zomato": ["zomato", "food", "online"],
+    "amazon": ["amazon", "online", "app", "website"],
+    "flipkart": ["flipkart", "online", "app", "website"],
+    "myntra": ["myntra", "online", "app", "website"],
+    "bigbasket": ["bigbasket", "grocery", "online"],
+    "blinkit": ["blinkit", "grocery", "online"],
+    "zepto": ["zepto", "grocery", "online"],
+    "makemytrip": ["makemytrip", "travel", "flight", "hotel", "online"],
+    "goibibo": ["goibibo", "travel", "flight", "hotel", "online"],
+    "cleartrip": ["cleartrip", "travel", "flight", "online"],
+    "ola": ["ola", "travel"],
+    "uber": ["uber", "travel"],
+    "rapido": ["rapido", "travel"],
+    "bookmyshow": ["bookmyshow", "entertainment", "movie", "online"],
+    "netflix": ["netflix", "streaming", "entertainment", "online"],
+    "spotify": ["spotify", "streaming", "entertainment", "online"],
+    "nykaa": ["nykaa", "online"],
+    "croma": ["croma", "electronics", "online"],
+    "ajio": ["ajio", "online"],
+    "jiomart": ["jiomart", "reliance", "online"],
+    "indigo": ["indigo", "flight", "travel"],
+    "irctc": ["irctc", "trains", "railway"],
+    "apollo": ["apollo", "pharmacy"],
+    "netmeds": ["netmeds", "pharmacy", "online"],
+    "dominos": ["dominos", "food", "online"],
+    "bpcl": ["bpcl", "fuel", "petrol", "diesel"],
+    "hp": ["fuel", "petrol", "diesel"],
+    "ioc": ["fuel", "petrol", "diesel"],
+    "lifestyle": ["lifestyle", "home centre"],
+    "tanishq": ["tanishq", "jewelry"],
+    "titan": ["titan", "helios", "jewelry"],
+    "tata": ["tata", "neu", "bigbasket", "croma"],
 };
 
 // ============================================================
-// CORE CALCULATOR
+// CORE: reward_math based calculator
+// ============================================================
+
+/**
+ * Calculate savings for a single credit card using its reward_math JSON.
+ * This is pure, strict, deterministic math — no guessing.
+ */
+function calculateCardSavings(
+    card: CreditCard,
+    merchantLower: string,
+    amount: number
+): { savings: number; percent: number; breakdown: string; warnings: string[]; matchedCategory: string } | null {
+    const math = card.rewardMath as RewardMath | null | undefined;
+
+    // If no reward_math exists, fall back to the old rewards array (Phase 1 compat)
+    if (!math) {
+        return calculateCardSavingsLegacy(card, merchantLower, amount);
+    }
+
+    // Get all the keywords that could match this merchant
+    const merchantKeywords = MERCHANT_TO_KEYWORDS[merchantLower] || [merchantLower];
+
+    // Check exclusions first — if the merchant is excluded, no savings
+    if (math.exclusions) {
+        for (const excl of math.exclusions) {
+            if (merchantKeywords.includes(excl.toLowerCase())) {
+                return null;
+            }
+        }
+    }
+
+    // Find the BEST matching category from reward_math
+    let bestCategory: RewardMathCategory | null = null;
+    let bestMatchScore = 0;
+
+    for (const cat of math.categories) {
+        let matchScore = 0;
+        for (const keyword of cat.keywords) {
+            if (merchantKeywords.includes(keyword.toLowerCase())) {
+                matchScore++;
+            }
+        }
+        if (matchScore > bestMatchScore) {
+            bestMatchScore = matchScore;
+            bestCategory = cat;
+        }
+    }
+
+    // Calculate based on type
+    const warnings: string[] = [];
+    let savingsRupees = 0;
+    let matchedCategoryLabel = "general";
+
+    if (math.type === "cashback") {
+        // CASHBACK cards — rate is a direct fraction (0.05 = 5%)
+        const rate = bestCategory ? (bestCategory.cashback_rate ?? bestCategory.rate) : math.default_rate;
+        savingsRupees = amount * rate;
+        matchedCategoryLabel = bestCategory ? bestCategory.keywords[0] : "general";
+
+        if (bestCategory?.max_cap_points_monthly && savingsRupees > bestCategory.max_cap_points_monthly) {
+            warnings.push(`Capped at ₹${bestCategory.max_cap_points_monthly}/month`);
+            savingsRupees = bestCategory.max_cap_points_monthly;
+        }
+
+        const pct = rate * 100;
+        return {
+            savings: Math.round(savingsRupees * 100) / 100,
+            percent: pct,
+            breakdown: `Cashback: ₹${Math.round(savingsRupees)} (${pct}% on ${matchedCategoryLabel})`,
+            warnings,
+            matchedCategory: matchedCategoryLabel,
+        };
+
+    } else if (math.type === "points" || math.type === "mixed") {
+        // POINTS cards — rate is a multiplier, need point_value_rupees to convert
+        const pointValue = math.point_value_rupees ?? 0.25;
+        const divisor = math.spend_divisor ?? 100;
+        const rate = bestCategory ? bestCategory.rate : math.default_rate;
+        matchedCategoryLabel = bestCategory ? bestCategory.keywords[0] : "general";
+
+        // Points earned = (amount / divisor) * rate
+        let pointsEarned = (amount / divisor) * rate;
+
+        // Apply monthly cap if it exists
+        if (bestCategory?.max_cap_points_monthly && pointsEarned > bestCategory.max_cap_points_monthly) {
+            warnings.push(`Capped at ${bestCategory.max_cap_points_monthly} points/month`);
+            pointsEarned = bestCategory.max_cap_points_monthly;
+        }
+
+        savingsRupees = pointsEarned * pointValue;
+        const effectivePercent = (savingsRupees / amount) * 100;
+
+        return {
+            savings: Math.round(savingsRupees * 100) / 100,
+            percent: Math.round(effectivePercent * 100) / 100,
+            breakdown: `${Math.round(pointsEarned)} points × ₹${pointValue}/pt = ₹${Math.round(savingsRupees)} (${effectivePercent.toFixed(1)}% on ${matchedCategoryLabel})`,
+            warnings,
+            matchedCategory: matchedCategoryLabel,
+        };
+    }
+
+    return null;
+}
+
+/**
+ * Legacy fallback for cards that don't have reward_math yet.
+ * Uses the old rewards[] array from Phase 1.
+ */
+function calculateCardSavingsLegacy(
+    card: CreditCard,
+    merchantLower: string,
+    amount: number
+): { savings: number; percent: number; breakdown: string; warnings: string[]; matchedCategory: string } | null {
+    const categories = MERCHANT_TO_KEYWORDS[merchantLower] || ["general"];
+    let bestRate = 0;
+    let bestRewardType = "cashback";
+    let bestCategory = "general";
+    let cap: number | undefined;
+
+    for (const reward of card.rewards) {
+        let matches = false;
+        for (const cat of categories) {
+            if (reward.category === cat || reward.category === "general") {
+                matches = true;
+                break;
+            }
+        }
+        if (matches && reward.rewardRate > bestRate) {
+            bestRate = reward.rewardRate;
+            bestRewardType = reward.rewardType;
+            bestCategory = reward.category;
+            cap = reward.cap;
+        }
+    }
+
+    if (bestRate > 0) {
+        const raw = (amount * bestRate) / 100;
+        const savings = cap ? Math.min(raw, cap) : raw;
+        const warnings: string[] = [];
+        if (cap && raw > cap) warnings.push(`Capped at ₹${cap}/month`);
+
+        return {
+            savings: Math.round(savings * 100) / 100,
+            percent: bestRate,
+            breakdown: `${bestRewardType === "cashback" ? "Cashback" : "Reward points"}: ₹${Math.round(savings)} (${bestRate}% on ${bestCategory})`,
+            warnings,
+            matchedCategory: bestCategory,
+        };
+    }
+
+    return null;
+}
+
+// ============================================================
+// MAIN CALCULATOR
 // ============================================================
 
 /**
@@ -96,66 +259,24 @@ export function calculateBestPayment(
     strategies: Strategy[]
 ): CalculationResult {
     const merchantLower = merchant.toLowerCase().trim();
-    const categories = MERCHANT_TO_CATEGORIES[merchantLower] || ["general"];
-    
     const options: PaymentOption[] = [];
 
-    // --- Calculate credit card savings ---
+    // --- Calculate credit card savings using reward_math ---
     for (const card of creditCards) {
-        let bestRate = 0;
-        let bestRewardCategory = "";
-        let bestRewardType = "";
-        let cap: number | undefined;
-        let notes = "";
-
-        for (const reward of card.rewards) {
-            let matches = false;
-
-            // Check if this reward applies to the merchant's categories
-            for (const cat of categories) {
-                if (reward.category === cat) {
-                    matches = true;
-                    break;
-                }
-            }
-            
-            // General always matches (but lower priority)
-            if (!matches && reward.category === "general") {
-                matches = true;
-            }
-
-            if (matches && reward.rewardRate > bestRate) {
-                bestRate = reward.rewardRate;
-                bestRewardCategory = reward.category;
-                bestRewardType = reward.rewardType;
-                cap = reward.cap;
-                notes = reward.notes || "";
-            }
-        }
-
-        if (bestRate > 0) {
-            const rawSavings = (amount * bestRate) / 100;
-            const savings = cap ? Math.min(rawSavings, cap) : rawSavings;
-            const wasCapped = cap ? rawSavings > cap : false;
-
-            const warnings: string[] = [];
-            if (wasCapped) {
-                warnings.push(`Capped at ₹${cap}/month — raw would be ₹${rawSavings.toFixed(0)}`);
-            }
+        const result = calculateCardSavings(card, merchantLower, amount);
+        if (result && result.savings > 0) {
+            const warnings = [...result.warnings];
             if (card.annualFee > 0 && !card.feeWaiver) {
                 warnings.push(`Annual fee ₹${card.annualFee}`);
             }
 
             options.push({
-                rank: 0, // will be set after sorting
+                rank: 0,
                 method: `${card.bank} ${card.name}`,
-                savings: Math.round(savings * 100) / 100,
-                savingsPercent: bestRate,
-                breakdown: [
-                    `${bestRewardType === "cashback" ? "Cashback" : bestRewardType === "points" ? "Reward points" : "Miles"}: ₹${savings.toFixed(0)} (${bestRate}% on ${bestRewardCategory})`,
-                    ...(notes ? [notes] : []),
-                ],
-                totalSavings: Math.round(savings * 100) / 100,
+                savings: result.savings,
+                savingsPercent: result.percent,
+                breakdown: [result.breakdown],
+                totalSavings: result.savings,
                 warnings,
                 confidence: "exact",
             });
@@ -166,13 +287,15 @@ export function calculateBestPayment(
     for (const app of upiApps) {
         for (const tier of app.rewardTiers) {
             let categoryMatch = false;
-            
-            // Check if this app reward matches the merchant
+
             if (tier.merchant && merchantLower.includes(tier.merchant.toLowerCase())) {
                 categoryMatch = true;
             }
-            if (tier.category && categories.includes(tier.category)) {
-                categoryMatch = true;
+            if (tier.category) {
+                const merchantKeywords = MERCHANT_TO_KEYWORDS[merchantLower] || [];
+                if (merchantKeywords.includes(tier.category)) {
+                    categoryMatch = true;
+                }
             }
 
             if (categoryMatch && tier.cashback) {
@@ -187,14 +310,12 @@ export function calculateBestPayment(
                         upiSavings = Math.min(upiSavings, cb.maxCashback);
                     }
                 } else if (cb.type === "scratch-card" && cb.maxCashback) {
-                    // Scratch cards are probabilistic
                     upiSavings = cb.maxCashback * (cb.probability || 50) / 100;
                 } else if (cb.type === "coins" && cb.value) {
-                    upiSavings = cb.value; // Coin value treated as cash equivalent
+                    upiSavings = cb.value;
                 }
 
                 if (upiSavings > 0 && amount >= (cb.minTransaction || 0)) {
-                    // UPI bonus can be ADDED to card savings (stacking)
                     options.push({
                         rank: 0,
                         method: `${app.name} UPI bonus`,
@@ -221,17 +342,18 @@ export function calculateBestPayment(
 
     // --- Find stacking tip ---
     let stackingTip: string | null = null;
-    const topCard = options.find(o => !o.method.includes("UPI bonus") && !o.method.includes("scratch"));
-const topUPI = options.find(o => o.method.includes("UPI bonus"));
-    
+    const topCard = options.find(o => !o.method.includes("UPI bonus"));
+    const topUPI = options.find(o => o.method.includes("UPI bonus"));
+
     if (topCard && topUPI) {
         const stackedSavings = topCard.savings + topUPI.savings;
         stackingTip = `Stack: ${topCard.method} + ${topUPI.method} = ₹${stackedSavings.toFixed(0)} total (₹${topCard.savings.toFixed(0)} card + ₹${topUPI.savings.toFixed(0)} UPI)`;
     }
 
     // --- Build relevant stacking strategy ---
-    const relevantStrategy = strategies.find(s => 
-        categories.some(c => s.applicableTo?.includes(c) || s.category === c)
+    const merchantKeywords = MERCHANT_TO_KEYWORDS[merchantLower] || [];
+    const relevantStrategy = strategies.find(s =>
+        merchantKeywords.some(kw => s.applicableTo?.includes(kw) || s.category === kw)
     );
     if (!stackingTip && relevantStrategy) {
         stackingTip = `Strategy: ${relevantStrategy.title} — ${relevantStrategy.steps[0]}`;
@@ -247,7 +369,7 @@ const topUPI = options.find(o => o.method.includes("UPI bonus"));
         query: `Best way to pay ₹${amount} at ${merchant}`,
         merchant,
         amount,
-        category: categories[0] || null,
+        category: merchantKeywords[0] || null,
         topOptions: options.slice(0, 5),
         bestOption,
         stackingTip,
@@ -276,33 +398,20 @@ export function calculateBestCard(
         const breakdown: Array<{ category: string; spending: number; savings: number; rate: number }> = [];
 
         for (const [category, amount] of Object.entries(monthlySpending)) {
-            // Find the best matching reward for this category
-            const matchingRewards = card.rewards.filter(r =>
-                r.category === category ||
-                r.category === "general" ||
-                (category === "food-delivery" && (r.category === "dining" || r.category === "food-delivery")) ||
-                (category === "online-shopping" && r.category === "online-shopping") ||
-                (category === "groceries" && r.category === "groceries")
-            );
-
-            const best = matchingRewards.sort((a, b) => b.rewardRate - a.rewardRate)[0];
-            
-            if (best) {
-                const savings = (amount * best.rewardRate) / 100;
-                const capped = best.cap ? Math.min(savings, best.cap) : savings;
-                totalMonthlySavings += capped;
+            const result = calculateCardSavings(card, category, amount);
+            if (result && result.savings > 0) {
+                totalMonthlySavings += result.savings;
                 breakdown.push({
                     category,
                     spending: amount,
-                    savings: Math.round(capped * 100) / 100,
-                    rate: best.rewardRate,
+                    savings: result.savings,
+                    rate: result.percent,
                 });
             }
         }
 
         const annualSavings = totalMonthlySavings * 12;
         const fee = card.annualFee;
-            // If fee waiver text exists, assume user can meet it
         const effectiveFee = card.feeWaiver ? 0 : fee;
         const netBenefit = annualSavings - effectiveFee;
 
@@ -320,7 +429,6 @@ export function calculateBestCard(
 
 /**
  * For a given bill type, calculate the best payment app + card combo.
- * Used for "optimize my bills" queries.
  */
 export function calculateBestBillPayment(
     billType: string,
@@ -328,16 +436,15 @@ export function calculateBestBillPayment(
     creditCards: CreditCard[],
     upiApps: UPIAppProfile[]
 ): { app: string; card: string | null; savings: number; breakdown: string[] } {
-    // Best UPI app for each bill type based on scratch card / cashback
     const appScores: Array<{ app: UPIAppProfile; score: number; reason: string }> = [];
-    
+
     for (const app of upiApps) {
-        const tier = app.rewardTiers.find(t => 
-            t.category === billType || 
-            t.category === "bills-recharges" || 
+        const tier = app.rewardTiers.find(t =>
+            t.category === billType ||
+            t.category === "bills-recharges" ||
             t.category === "recharge"
         );
-        
+
         if (tier?.cashback) {
             let score = 0;
             if (tier.cashback.type === "flat" && tier.cashback.value) {
@@ -347,7 +454,7 @@ export function calculateBestBillPayment(
             } else if (tier.cashback.type === "scratch-card" && tier.cashback.maxCashback) {
                 score = tier.cashback.maxCashback * (tier.cashback.probability || 50) / 100;
             }
-            
+
             if (score > 0) {
                 appScores.push({ app, score, reason: tier.cashback.notes || `${app.name} reward` });
             }
@@ -356,16 +463,14 @@ export function calculateBestBillPayment(
 
     appScores.sort((a, b) => b.score - a.score);
     const bestApp = appScores[0];
-    
-    // Best card for bills category
+
+    // Best card for bills
     let bestCard: { name: string; savings: number } | null = null;
     for (const card of creditCards) {
-        const reward = card.rewards.find(r => r.category === "bills-recharges" || r.category === "general");
-        if (reward) {
-            const savings = (amount * reward.rewardRate) / 100;
-            const capped = reward.cap ? Math.min(savings, reward.cap) : savings;
-            if (!bestCard || capped > bestCard.savings) {
-                bestCard = { name: `${card.bank} ${card.name}`, savings: capped };
+        const result = calculateCardSavings(card, billType, amount);
+        if (result && result.savings > 0) {
+            if (!bestCard || result.savings > bestCard.savings) {
+                bestCard = { name: `${card.bank} ${card.name}`, savings: result.savings };
             }
         }
     }
@@ -390,10 +495,10 @@ export function calculateBestBillPayment(
  */
 export function formatCalculationForLLM(result: CalculationResult): string {
     const parts: string[] = [];
-    
+
     parts.push(`[CALCULATED RESULT — These numbers are VERIFIED. Use them exactly as shown.]`);
     parts.push(`Query: ${result.query}`);
-    
+
     if (result.topOptions.length > 0) {
         parts.push(`\nRANKED PAYMENT OPTIONS (best first):`);
         for (const opt of result.topOptions) {

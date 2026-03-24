@@ -16,13 +16,10 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { generateEmbedding } from "./embedding-service";
 
-// Import TypeScript data as fallback
-import { CREDIT_CARDS, type CreditCard } from "./knowledge/credit-cards";
-import { UPI_APPS, type UPIAppProfile } from "./knowledge/upi-apps";
-import {
-    OFFER_STACKING_STRATEGIES,
-    type Strategy,
-} from "./knowledge/payment-strategies";
+// Type-only imports — data arrays removed; DB is now the single source of truth
+import type { CreditCard } from "./knowledge/credit-cards";
+import type { UPIAppProfile } from "./knowledge/upi-apps";
+import type { Strategy } from "./knowledge/payment-strategies";
 
 type FreshnessSource = "database" | "fallback";
 
@@ -93,9 +90,9 @@ export async function getKnowledgeFreshnessSnapshot(): Promise<KnowledgeFreshnes
     const fallbackSnapshot: KnowledgeFreshnessSnapshot = {
         generatedAt,
         overallSource: "fallback",
-        creditCards: summarizeDatasetFreshness(null, "fallback", CREDIT_CARDS.length),
-        upiApps: summarizeDatasetFreshness(null, "fallback", UPI_APPS.length),
-        strategies: summarizeDatasetFreshness(null, "fallback", OFFER_STACKING_STRATEGIES.length),
+        creditCards: summarizeDatasetFreshness(null, "fallback", 0),
+        upiApps: summarizeDatasetFreshness(null, "fallback", 0),
+        strategies: summarizeDatasetFreshness(null, "fallback", 0),
     };
 
     try {
@@ -134,9 +131,9 @@ export async function getKnowledgeFreshnessSnapshot(): Promise<KnowledgeFreshnes
         return {
             generatedAt,
             overallSource,
-            creditCards: summarizeDatasetFreshness(cardsRows, cardsSource, CREDIT_CARDS.length),
-            upiApps: summarizeDatasetFreshness(upiRows, upiSource, UPI_APPS.length),
-            strategies: summarizeDatasetFreshness(strategyRows, strategiesSource, OFFER_STACKING_STRATEGIES.length),
+            creditCards: summarizeDatasetFreshness(cardsRows, cardsSource, cardsRows?.length ?? 0),
+            upiApps: summarizeDatasetFreshness(upiRows, upiSource, upiRows?.length ?? 0),
+            strategies: summarizeDatasetFreshness(strategyRows, strategiesSource, strategyRows?.length ?? 0),
         };
     } catch {
         return fallbackSnapshot;
@@ -175,6 +172,7 @@ interface DBCreditCard {
     pros: string[];
     cons: string[];
     is_active: boolean;
+    reward_math: Record<string, unknown> | null;
 }
 
 /**
@@ -208,6 +206,7 @@ function dbToCreditCard(row: DBCreditCard): CreditCard {
         incomeRequirement: row.income_requirement || undefined,
         pros: row.pros || [],
         cons: row.cons || [],
+        rewardMath: row.reward_math as CreditCard["rewardMath"] ?? null,
     };
 }
 
@@ -224,14 +223,14 @@ export async function getCreditCards(): Promise<CreditCard[]> {
             .order("bank");
 
         if (error || !data || data.length === 0) {
-            console.warn("[KnowledgeService] Falling back to TypeScript credit cards:", error?.message || "no data");
-            return CREDIT_CARDS;
+            console.warn("[KnowledgeService] No credit cards in DB:", error?.message || "empty table");
+            return [];
         }
 
         return data.map((row: DBCreditCard) => dbToCreditCard(row));
     } catch {
-        console.warn("[KnowledgeService] DB unavailable, using TypeScript credit cards");
-        return CREDIT_CARDS;
+        console.warn("[KnowledgeService] DB unavailable for credit cards — returning empty");
+        return [];
     }
 }
 
@@ -291,14 +290,14 @@ export async function getUPIApps(): Promise<UPIAppProfile[]> {
             .order("market_share", { ascending: false });
 
         if (error || !data || data.length === 0) {
-            console.warn("[KnowledgeService] Falling back to TypeScript UPI apps:", error?.message || "no data");
-            return UPI_APPS;
+            console.warn("[KnowledgeService] No UPI apps in DB:", error?.message || "empty table");
+            return [];
         }
 
         return data.map((row: DBUPIApp) => dbToUPIApp(row));
     } catch {
-        console.warn("[KnowledgeService] DB unavailable, using TypeScript UPI apps");
-        return UPI_APPS;
+        console.warn("[KnowledgeService] DB unavailable for UPI apps — returning empty");
+        return [];
     }
 }
 
@@ -350,14 +349,14 @@ export async function getStrategies(): Promise<Strategy[]> {
             .order("category");
 
         if (error || !data || data.length === 0) {
-            console.warn("[KnowledgeService] Falling back to TypeScript strategies:", error?.message || "no data");
-            return OFFER_STACKING_STRATEGIES;
+            console.warn("[KnowledgeService] No strategies in DB:", error?.message || "empty table");
+            return [];
         }
 
         return data.map((row: DBStrategy) => dbToStrategy(row));
     } catch {
-        console.warn("[KnowledgeService] DB unavailable, using TypeScript strategies");
-        return OFFER_STACKING_STRATEGIES;
+        console.warn("[KnowledgeService] DB unavailable for strategies — returning empty");
+        return [];
     }
 }
 
